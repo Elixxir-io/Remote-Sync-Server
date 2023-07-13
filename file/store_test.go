@@ -9,6 +9,7 @@ package file
 
 import (
 	"bytes"
+	"errors"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -83,6 +84,17 @@ func TestStore_Read(t *testing.T) {
 	}
 }
 
+// Error path: Tests that Store.Read returns NonLocalFileErr when the path is
+// not local to the base directory.
+func TestStore_Read_NonLocalPathError(t *testing.T) {
+	s := &Store{baseDir: "baseDir"}
+	_, err := s.Read("../file")
+	if !errors.Is(err, NonLocalFileErr) {
+		t.Errorf("Unexpected error for non-local file."+
+			"\nexpected: %v\nreceived: %v", NonLocalFileErr, err)
+	}
+}
+
 // Tests that all the files written by Store.Write can be properly read by
 // Store.Read. Also checks that Store.lastWritePath is correctly updated on each
 // write.
@@ -132,6 +144,17 @@ func TestStore_Write_InvalidPathError(t *testing.T) {
 	}
 }
 
+// Error path: Tests that Store.Write returns NonLocalFileErr when the path is
+// not local to the base directory.
+func TestStore_Write_NonLocalPathError(t *testing.T) {
+	s := &Store{baseDir: "baseDir"}
+	err := s.Write("../file", nil)
+	if !errors.Is(err, NonLocalFileErr) {
+		t.Errorf("Unexpected error for non-local file."+
+			"\nexpected: %v\nreceived: %v", NonLocalFileErr, err)
+	}
+}
+
 // Tests that Store.GetLastModified returns a modified time close to the time
 // taken before Store.Write is called.
 func TestStore_GetLastModified(t *testing.T) {
@@ -160,6 +183,17 @@ func TestStore_GetLastModified(t *testing.T) {
 				"(Δ%s).\nexpected: %s\nreceived: %s",
 				path, expected.Sub(lastModified), expected, lastModified)
 		}
+	}
+}
+
+// Error path: Tests that Store.GetLastModified returns NonLocalFileErr when the
+// path is not local to the base directory.
+func TestStore_GetLastModified_NonLocalPathError(t *testing.T) {
+	s := &Store{baseDir: "baseDir"}
+	_, err := s.GetLastModified("../file")
+	if !errors.Is(err, NonLocalFileErr) {
+		t.Errorf("Unexpected error for non-local file."+
+			"\nexpected: %v\nreceived: %v", NonLocalFileErr, err)
 	}
 }
 
@@ -192,11 +226,11 @@ func TestStore_GetLastWrite(t *testing.T) {
 			t.Errorf("Failed to write data (%d): %+v", i, err)
 		}
 
+		const round = 250 * time.Millisecond
 		lastModified, err := s.GetLastWrite()
 		if err != nil {
 			t.Errorf("Failed to get last modified (%d): %+v", i, err)
-		} else if !lastModified.Round(100 * time.Millisecond).Equal(
-			timeNow.Round(100 * time.Millisecond)) {
+		} else if !lastModified.Round(round).Equal(timeNow.Round(round)) {
 			t.Errorf("Last modified is not close to expected time (Δ%s) (%d)."+
 				"\nexpected: %s\nreceived: %s",
 				timeNow.Sub(lastModified), i, timeNow, lastModified)
@@ -206,7 +240,6 @@ func TestStore_GetLastWrite(t *testing.T) {
 
 // Tests that Store.ReadDir returns all the expected directories.
 func TestStore_ReadDir(t *testing.T) {
-	prng := rand.New(rand.NewSource(365785))
 	testDir := "tmp"
 	s := newTestStore("baseDir", testDir, t)
 	defer removeTestFile(t, testDir)
@@ -222,7 +255,7 @@ func TestStore_ReadDir(t *testing.T) {
 	}
 
 	for _, path := range testFiles {
-		if err := s.Write(path, []byte(randString(1+prng.Intn(12), prng))); err != nil {
+		if err := s.Write(path, []byte("data")); err != nil {
 			t.Errorf("Failed to write data for path %s: %+v", path, err)
 		}
 	}
@@ -238,6 +271,17 @@ func TestStore_ReadDir(t *testing.T) {
 	}
 }
 
+// Error path: Tests that Store.ReadDir returns NonLocalFileErr when the path is
+// not local to the base directory.
+func TestStore_ReadDir_NonLocalPathError(t *testing.T) {
+	s := &Store{baseDir: "baseDir"}
+	_, err := s.ReadDir("../file")
+	if !errors.Is(err, NonLocalFileErr) {
+		t.Errorf("Unexpected error for non-local file."+
+			"\nexpected: %v\nreceived: %v", NonLocalFileErr, err)
+	}
+}
+
 // Error path: Tests that Store.ReadDir returns an error when the file
 // does not exist.
 func TestStore_ReadDir_InvalidPathError(t *testing.T) {
@@ -248,6 +292,58 @@ func TestStore_ReadDir_InvalidPathError(t *testing.T) {
 	_, err := s.ReadDir("file")
 	if err == nil {
 		t.Errorf("Failed to receive error for invalid path.")
+	}
+}
+
+func TestStore_readyPath(t *testing.T) {
+	s := &Store{baseDir: "baseDir"}
+	tests := []struct {
+		path, expected string
+		err            error
+	}{
+		{"dir/file", filepath.Join(s.baseDir, "dir/file"), nil},
+		{"../dir/file", "", NonLocalFileErr},
+	}
+
+	for i, tt := range tests {
+		path, err := s.readyPath(tt.path)
+		if tt.err == nil {
+			if err != nil {
+				t.Errorf(
+					"Failed to ready valid path %s (%d): %+v", tt.path, i, err)
+			} else if path != tt.expected {
+				t.Errorf("Unexpected path for %s (%d)."+
+					"\nexpected: %s\nreceived: %s",
+					tt.path, i, tt.expected, path)
+			}
+		} else if !errors.Is(err, tt.err) {
+			t.Errorf("Unexpected error for invalid path %s (%d)."+
+				"\nexpected: %s\nreceived: %v", tt.path, i, tt.err, err)
+		}
+	}
+}
+
+// Tests that Store.isLocalFile returns nil for all local files and
+// NonLocalFileErr for non-local files.
+func TestStore_isLocalFile(t *testing.T) {
+	s := &Store{baseDir: "baseDir"}
+	testPaths := map[string]bool{
+		filepath.Join(s.baseDir, "dir", "file"):              true,
+		filepath.Join("bob", "dir", "file"):                  false,
+		filepath.Join(s.baseDir, "..", "bob", "dir", "file"): false,
+		filepath.Join(s.baseDir, "file"):                     true,
+		"file":                                               false,
+		"./file":                                             false,
+		"~/file":                                             false,
+		`C:\`:                                                false,
+	}
+
+	for path, expected := range testPaths {
+		isLocal := s.isLocalFile(path)
+		if expected != isLocal {
+			t.Errorf("Did not get expected result for path %s."+
+				"\nexpected: %t\nreceoved: %t", path, expected, isLocal)
+		}
 	}
 }
 

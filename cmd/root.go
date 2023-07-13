@@ -10,16 +10,17 @@ package cmd
 import (
 	"crypto/tls"
 	"fmt"
-	"github.com/spf13/cobra"
-	jww "github.com/spf13/jwalterweatherman"
-	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
-	"gitlab.com/elixxir/comms/remoteSync/server"
-	"gitlab.com/xx_network/primitives/id"
 	"io"
 	"log"
 	"os"
 
+	"github.com/spf13/cobra"
+	jww "github.com/spf13/jwalterweatherman"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
+
+	"gitlab.com/elixxir/comms/remoteSync/server"
+	"gitlab.com/xx_network/primitives/id"
 	"gitlab.com/xx_network/primitives/utils"
 )
 

@@ -60,7 +60,7 @@ build:
     - /upload-artifacts.sh release/
   artifacts:
     paths:
-     - release/
+      - release/
 
 # This pipeline job will attempt to have pkg.go.dev update docs for client/xxdk.
 #
