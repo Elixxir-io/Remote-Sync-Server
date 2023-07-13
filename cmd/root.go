@@ -8,15 +8,17 @@
 package cmd
 
 import (
+	"crypto/tls"
 	"fmt"
+	"github.com/spf13/cobra"
+	jww "github.com/spf13/jwalterweatherman"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
+	"gitlab.com/elixxir/comms/remoteSync/server"
+	"gitlab.com/xx_network/primitives/id"
 	"io"
 	"log"
 	"os"
-
-	"github.com/spf13/cobra"
-	jww "github.com/spf13/jwalterweatherman"
-	"github.com/spf13/viper"
 
 	"gitlab.com/xx_network/primitives/utils"
 )
@@ -38,7 +40,34 @@ var rootCmd = &cobra.Command{
 		initLog(viper.GetString(logPathFlag), viper.GetUint(logLevelFlag))
 		jww.INFO.Printf(Version())
 
-		/* Do server stuff here. */
+		// Obtain parameters
+		signedCertPath := viper.GetString("signedCertPath")
+		signedKeyPath := viper.GetString("signedKeyPath")
+		localAddress := fmt.Sprintf("0.0.0.0:%d", viper.GetInt("port"))
+
+		// Obtain certs
+		signedCert, err := utils.ReadFile(signedCertPath)
+		if err != nil {
+			jww.FATAL.Panicf("failed to read certificate at %+v: %+v",
+				signedCertPath, err)
+		}
+		signedKey, err := utils.ReadFile(signedKeyPath)
+		if err != nil {
+			jww.FATAL.Panicf("failed to read key at %+v: %+v",
+				signedKeyPath, err)
+		}
+		keyPair, err := tls.X509KeyPair(signedCert, signedKey)
+		if err != nil {
+			jww.FATAL.Panicf("%+v", err)
+		}
+
+		// Start comms
+		comms := server.StartRemoteSync(&id.DummyUser, localAddress,
+			nil, signedCert, signedKey)
+		err = comms.ServeHttps(keyPair)
+		if err != nil {
+			jww.FATAL.Panicf("%+v", err)
+		}
 	},
 }
 

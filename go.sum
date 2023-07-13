@@ -180,6 +180,10 @@ github.com/yuin/goldmark v1.1.25/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9de
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.1.32/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
+gitlab.com/elixxir/comms v0.0.4-0.20230613220741-7de1d2ca4a1c h1:0TpLn4AdarrqCwUMvnz4Md+9gLyk9wrQ73J3W9U5zJo=
+gitlab.com/elixxir/comms v0.0.4-0.20230613220741-7de1d2ca4a1c/go.mod h1:z+qW0D9VpY5QKTd7wRlb5SK4kBNqLYsa4DXBcUXue9Q=
+gitlab.com/elixxir/comms v0.0.4-0.20230713210734-9d83a7e2904a h1:gp+xoKE2T45HDFCTXFfbdUIhOHM3WIAnZKzvJA79gSk=
+gitlab.com/elixxir/comms v0.0.4-0.20230713210734-9d83a7e2904a/go.mod h1:z+qW0D9VpY5QKTd7wRlb5SK4kBNqLYsa4DXBcUXue9Q=
 gitlab.com/xx_network/primitives v0.0.4-0.20230710164512-888a035f126d h1:VBhP3i3wRakBM32vrGed57SAr7aw9nxDG/WyjmSgREo=
 gitlab.com/xx_network/primitives v0.0.4-0.20230710164512-888a035f126d/go.mod h1:ABtt5oK+Sl1Q9l3qWK9efxmLKtNMSskpIjbe6IvB9sQ=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=
