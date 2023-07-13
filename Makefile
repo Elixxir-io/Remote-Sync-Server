@@ -2,7 +2,6 @@
 
 version:
 	go run main.go generate
-	sed -i.bak 's/package\ cmd/package\ xxdk/g' version_vars.go
 	mv version_vars.go cmd/version_vars.go
 
 clean:
