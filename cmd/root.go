@@ -31,8 +31,8 @@ func Execute() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "remoteKvServer",
-	Short: "remoteKvServer starts a secure remote KV server",
+	Use:   "remoteSyncServer",
+	Short: "remoteSyncServer starts a secure remote sync server for Haven",
 	Run: func(cmd *cobra.Command, args []string) {
 		initConfig(configFilePath)
 		initLog(viper.GetString(logPathFlag), viper.GetUint(logLevelFlag))

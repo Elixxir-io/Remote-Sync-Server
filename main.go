@@ -7,7 +7,7 @@
 
 package main
 
-import "gitlab.com/elixxir/remoteKvServer/cmd"
+import "gitlab.com/elixxir/remoteSyncServer/cmd"
 
 func main() {
 	cmd.Execute()

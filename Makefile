@@ -23,7 +23,7 @@ update_master:
 	GOFLAGS="" go get -d gitlab.com/elixxir/client/v4@master
 
 binary:
-	go build -ldflags '-w -s' -trimpath -o remoteKvServer main.go
+	go build -ldflags '-w -s' -trimpath -o remoteSyncServer main.go
 
 master: update_master clean build
 

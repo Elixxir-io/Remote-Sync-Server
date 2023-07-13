@@ -1,4 +1,4 @@
-module gitlab.com/elixxir/remoteKvServer
+module gitlab.com/elixxir/remoteSyncServer
 
 go 1.19
 

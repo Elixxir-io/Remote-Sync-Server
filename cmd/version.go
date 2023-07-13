@@ -23,7 +23,7 @@ const currentVersion = "0.0.1"
 // Version returns the current version and dependencies for this binary.
 func Version() string {
 	return fmt.Sprintf(
-		"Haven Remote KV Server v%s -- %s\n\nDependencies:\n\n%s\n",
+		"Haven Remote Sync Server v%s -- %s\n\nDependencies:\n\n%s\n",
 		SEMVER, GITVERSION, DEPENDENCIES)
 }
 
@@ -44,7 +44,6 @@ var generateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generates version and dependency information for the binary",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("genera\n")
 		utils.GenerateVersionFile(currentVersion)
 	},
 }
