@@ -3,3 +3,9 @@ vendor/
 
 # Ignore Jetbrains IDE folder
 .idea/*
+
+# Ignore logs
+*.log
+
+# Ignore temp files
+*.bak

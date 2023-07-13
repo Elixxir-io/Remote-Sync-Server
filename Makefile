@@ -1,4 +1,9 @@
-.PHONY: update master release update_master update_release build clean binary tests wasm_tests go_tests
+.PHONY: update master release update_master update_release build clean binary version
+
+version:
+	go run main.go generate
+	sed -i.bak 's/package\ cmd/package\ xxdk/g' version_vars.go
+	mv version_vars.go cmd/version_vars.go
 
 clean:
 	go mod tidy
