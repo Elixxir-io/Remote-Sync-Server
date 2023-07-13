@@ -19,7 +19,7 @@ stages:
   - test
   - build
   - doc-update
-  - version_check
+  - version-check
 
 test:
   stage: test
