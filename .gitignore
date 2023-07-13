@@ -1,0 +1,5 @@
+# Ignore vendor folders
+vendor/
+
+# Ignore Jetbrains IDE folder
+.idea/*
