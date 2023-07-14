@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	jww "github.com/spf13/jwalterweatherman"
@@ -42,29 +44,31 @@ var rootCmd = &cobra.Command{
 		jww.INFO.Printf(Version())
 
 		// Obtain parameters
-		signedCertPath := viper.GetString("signedCertPath")
-		signedKeyPath := viper.GetString("signedKeyPath")
-		localAddress := fmt.Sprintf("0.0.0.0:%d", viper.GetInt("port"))
+		signedCertPath := viper.GetString(signedCertPathTag)
+		signedKeyPath := viper.GetString(signedKeyPathTag)
+		localAddress :=
+			net.JoinHostPort("0.0.0.0", strconv.Itoa(viper.GetInt(portTag)))
 
 		// Obtain certs
 		signedCert, err := utils.ReadFile(signedCertPath)
 		if err != nil {
-			jww.FATAL.Panicf("failed to read certificate at %+v: %+v",
+			jww.FATAL.Panicf("Failed to read certificate from path %s: %+v",
 				signedCertPath, err)
 		}
 		signedKey, err := utils.ReadFile(signedKeyPath)
 		if err != nil {
-			jww.FATAL.Panicf("failed to read key at %+v: %+v",
+			jww.FATAL.Panicf("Failed to read key from path %s: %+v",
 				signedKeyPath, err)
 		}
 		keyPair, err := tls.X509KeyPair(signedCert, signedKey)
 		if err != nil {
-			jww.FATAL.Panicf("%+v", err)
+			jww.FATAL.Panicf("Failed to generate a public/private key pair "+
+				"from the cert and key: %+v", err)
 		}
 
 		// Start comms
-		comms := server.StartRemoteSync(&id.DummyUser, localAddress,
-			nil, signedCert, signedKey)
+		comms := server.StartRemoteSync(
+			&id.DummyUser, localAddress, nil, signedCert, signedKey)
 		err = comms.ServeHttps(keyPair)
 		if err != nil {
 			jww.FATAL.Panicf("%+v", err)
@@ -77,6 +81,10 @@ var configFilePath string
 const (
 	logPathFlag  = "logPath"
 	logLevelFlag = "logLevel"
+
+	signedCertPathTag = "signedCertPath"
+	signedKeyPathTag  = "signedKeyPath"
+	portTag           = "port"
 )
 
 // initConfig reads in config file from the file path.
@@ -146,6 +154,18 @@ func init() {
 	rootCmd.PersistentFlags().IntP(logLevelFlag, "v", 0,
 		"Verbosity level for log printing (2+ = Trace, 1 = Debug, 0 = Info).")
 	bindPFlag(rootCmd.PersistentFlags(), logLevelFlag, rootCmd.Use)
+
+	rootCmd.PersistentFlags().String(signedCertPathTag, "",
+		"Path to the signed certificate file.")
+	bindPFlag(rootCmd.PersistentFlags(), signedCertPathTag, rootCmd.Use)
+
+	rootCmd.PersistentFlags().String(signedKeyPathTag, "",
+		"Path to the signed key file.")
+	bindPFlag(rootCmd.PersistentFlags(), signedKeyPathTag, rootCmd.Use)
+
+	rootCmd.PersistentFlags().String(portTag, "",
+		"Local server port")
+	bindPFlag(rootCmd.PersistentFlags(), portTag, rootCmd.Use)
 }
 
 // bindPFlag binds the key to a pflag.Flag. Panics on error.
