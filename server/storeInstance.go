@@ -19,10 +19,11 @@ import (
 // storeInstance stores an instance of a store.Store that only exists for the
 // given TTL.
 type storeInstance struct {
-	store.Store
+	username   string
 	genTime    time.Time
 	expiryTime time.Time
 	ttl        time.Duration
+	store.Store
 }
 
 func newStoreInstance(storageDir, username string, genTime time.Time,
@@ -34,10 +35,11 @@ func newStoreInstance(storageDir, username string, genTime time.Time,
 	}
 
 	return storeInstance{
-		Store:      s,
+		username:   username,
 		genTime:    genTime,
 		expiryTime: genTime.Add(ttl),
 		ttl:        ttl,
+		Store:      s,
 	}, nil
 }
 

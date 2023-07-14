@@ -37,21 +37,23 @@ var (
 
 // handler handles the server stores for each token/user.
 type handler struct {
-	storageDir string
-	tokenTTL   time.Duration
-	stores     map[Token]storeInstance
-	users      map[string]string
-	mux        sync.Mutex
+	storageDir    string
+	tokenTTL      time.Duration
+	stores        map[Token]storeInstance
+	userTokens    map[string]Token
+	userPasswords map[string]string
+	mux           sync.Mutex
 }
 
 // newHandler generates a new store handler.
 func newHandler(
 	storageDir string, tokenTTL time.Duration, userRecords [][]string) *handler {
 	return &handler{
-		storageDir: storageDir,
-		tokenTTL:   tokenTTL,
-		stores:     make(map[Token]storeInstance),
-		users:      userRecordsToMap(userRecords),
+		storageDir:    storageDir,
+		tokenTTL:      tokenTTL,
+		stores:        make(map[Token]storeInstance),
+		userTokens:    make(map[string]Token),
+		userPasswords: userRecordsToMap(userRecords),
 	}
 }
 
@@ -68,7 +70,6 @@ func userRecordsToMap(records [][]string) map[string]string {
 
 func (h *handler) Login(
 	msg *pb.RsAuthenticationRequest) (*pb.RsAuthenticationResponse, error) {
-
 	err := h.verifyUser(msg.GetUsername(), msg.GetPasswordHash(), msg.GetSalt())
 	if err != nil {
 		return nil, err
@@ -83,8 +84,6 @@ func (h *handler) Login(
 	if err != nil {
 		return nil, err
 	}
-
-	// TODO: if the store already exists with a different token, figure out how to delete it
 
 	return &pb.RsAuthenticationResponse{
 		Token:     string(token),
@@ -169,7 +168,7 @@ func (h *handler) verifyUser(username string, passwordHash, salt []byte) error {
 	h.mux.Lock()
 	defer h.mux.Unlock()
 
-	clearTextPassword, exists := h.users[username]
+	clearTextPassword, exists := h.userPasswords[username]
 	if !exists {
 		return errors.Errorf("no user registered with username %q", username)
 	}
@@ -197,6 +196,7 @@ func (h *handler) getStore(t Token) (store.Store, error) {
 
 	if !s.IsValid() {
 		delete(h.stores, t)
+		delete(h.userTokens, s.username)
 		return nil, ExpiredTokenErr
 	}
 
@@ -219,7 +219,15 @@ func (h *handler) addStore(username string, genTime time.Time,
 		return storeInstance{}, err
 	}
 
+	// If a token has been previously registered for this user, delete it and
+	// its storage
+	if oldToken, exists := h.userTokens[username]; exists {
+		delete(h.stores, oldToken)
+		delete(h.userTokens, username)
+	}
+
 	h.stores[token] = s
+	h.userTokens[username] = token
 
 	return s, nil
 }
