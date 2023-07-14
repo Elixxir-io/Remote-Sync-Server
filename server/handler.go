@@ -91,6 +91,8 @@ func userRecordsToMap(records [][]string) (map[string]string, error) {
 // and returns to them a unique token used to interact with the server and an
 // expiration time. When a token expires, a user must log in again to get issues
 // a new token.
+//
+// Returns [InvalidCredentialsErr] for invalid username or password.
 func (h *handler) Login(
 	msg *pb.RsAuthenticationRequest) (*pb.RsAuthenticationResponse, error) {
 	jww.DEBUG.Printf("Received Login message: %s", msg)
@@ -223,7 +225,8 @@ func (h *handler) ReadDir(
 	return &pb.RsReadDirResponse{Data: directories}, nil
 }
 
-// verifyUser verifies the username and password are correct.
+// verifyUser verifies the username and password are correct. Returns
+// InvalidCredentialsErr for incorrect username or password.
 func (h *handler) verifyUser(username string, passwordHash, salt []byte) error {
 	h.mux.Lock()
 	defer h.mux.Unlock()
@@ -233,14 +236,18 @@ func (h *handler) verifyUser(username string, passwordHash, salt []byte) error {
 		return InvalidCredentialsErr
 	}
 
-	hh := hash.CMixHash.New()
-	hh.Write([]byte(clearTextPassword))
-	hh.Write(salt)
-	if !bytes.Equal(hh.Sum(nil), passwordHash) {
+	if !bytes.Equal(hashPassword(clearTextPassword, salt), passwordHash) {
 		return InvalidCredentialsErr
 	}
 
 	return nil
+}
+
+func hashPassword(clearTextPassword string, salt []byte) []byte {
+	h := hash.CMixHash.New()
+	h.Write([]byte(clearTextPassword))
+	h.Write(salt)
+	return h.Sum(nil)
 }
 
 // getStore returns the store for the given token. Returns [InvalidTokenErr] for
@@ -282,8 +289,8 @@ func (h *handler) addStore(username string, tokenTTL time.Duration) (
 	token := Token(n.Value)
 
 	// The token should always be unique; this error should never occur
-	if _, exists := h.stores[token]; !exists {
-		return storeInstance{}, StoreAlreadyExistsErr
+	if _, exists := h.stores[token]; exists {
+		return storeInstance{}, errors.WithStack(StoreAlreadyExistsErr)
 	}
 
 	if oldToken, exists := h.userTokens[username]; exists {

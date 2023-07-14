@@ -15,6 +15,11 @@ import (
 // username and password.
 type Token nonce.Value
 
+// Marshal marshals the Token into a byte slice.
+func (t Token) Marshal() []byte {
+	return t[:]
+}
+
 // UnmarshalToken unmarshalls the byte slice into a Token.
 func UnmarshalToken(b []byte) Token {
 	var t Token

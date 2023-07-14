@@ -8,11 +8,18 @@
 package server
 
 import (
+	"bytes"
 	"encoding/base64"
+	"errors"
 	"math/rand"
 	"reflect"
 	"testing"
 	"time"
+
+	pb "gitlab.com/elixxir/comms/mixmessages"
+	"gitlab.com/elixxir/remoteSyncServer/store"
+	"gitlab.com/xx_network/crypto/nonce"
+	"gitlab.com/xx_network/primitives/netTime"
 )
 
 // Unit test of newHandler.
@@ -37,6 +44,14 @@ func Test_newHandler(t *testing.T) {
 	}
 }
 
+// Error path: Tests that newHandler returns an error for invalid user records
+func Test_newHandler_UserError(t *testing.T) {
+	_, err := newHandler("", 0, [][]string{{"user", "pass"}, {"user2"}}, nil)
+	if err == nil {
+		t.Errorf("Failed to error for invalid records.")
+	}
+}
+
 // Tests that userRecordsToMap returns the expected map.
 func Test_userRecordsToMap(t *testing.T) {
 	prng := rand.New(rand.NewSource(3459806))
@@ -51,42 +66,304 @@ func Test_userRecordsToMap(t *testing.T) {
 		username := base64.StdEncoding.EncodeToString(usernameBytes)
 		password := base64.StdEncoding.EncodeToString(passwordBytes)
 		records[i] = []string{username, password}
+
+		// Half of the time, add extra records
+		if prng.Intn(2) == 0 {
+			extraRecords := 1 + prng.Intn(15)
+			for j := 0; j < extraRecords; j++ {
+				extraRecord := make([]byte, 3+prng.Intn(26))
+				prng.Read(extraRecord)
+				records[i] = append(records[i],
+					base64.StdEncoding.EncodeToString(extraRecord))
+			}
+		}
+
 		expected[username] = password
 	}
 
-	recordsMap, _ := userRecordsToMap(records)
+	recordsMap, err := userRecordsToMap(records)
+	if err != nil {
+		t.Errorf("Failed to convert records: %+v", err)
+	}
 	if !reflect.DeepEqual(expected, recordsMap) {
 		t.Errorf("Unexpected records map.\nexpected: %s\nreceived: %s",
 			expected, recordsMap)
 	}
 }
 
+// Error path: Tests that userRecordsToMap returns an error for an invalid
+// record.
+func Test_userRecordsToMap_InvalidRecordError(t *testing.T) {
+	_, err := userRecordsToMap([][]string{{"user", "pass"}, {"user2"}})
+	if err == nil {
+		t.Errorf("Failed to error for invalid records.")
+	}
+}
+
+// Tests that handler.Login properly hashes the password and checks the username
+// and that the message returns makes sense.
 func Test_handler_Login(t *testing.T) {
+	prng := rand.New(rand.NewSource(44477))
+	username := "waldo"
+	password := "hunter2"
+	salt := make([]byte, 32)
+	prng.Read(salt)
+
+	passwordHash := hashPassword(password, salt)
+
+	h, _ := newHandler(
+		"tmp", time.Hour, [][]string{{username, password}}, store.NewMemStore)
+
+	msg, err := h.Login(&pb.RsAuthenticationRequest{
+		Username:     username,
+		PasswordHash: passwordHash,
+		Salt:         salt,
+	})
+	if err != nil {
+		t.Errorf("Login error: %+v", err)
+	}
+
+	var token Token
+	if msg.GetToken() == nil ||
+		len(msg.GetToken()) != nonce.NonceLen ||
+		bytes.Equal(msg.GetToken(), token.Marshal()) {
+		t.Errorf("Received invalid token: %X", msg.GetToken())
+	}
+
+	if now := netTime.Now().Unix(); msg.ExpiresAt < now {
+		t.Errorf("ExpiresAt %d before now %d.", msg.ExpiresAt, now)
+	}
 }
 
-func Test_handler_Read(t *testing.T) {
+// Error path: Tests that handler.Login returns InvalidCredentialsErr for an
+// invalid username.
+func Test_handler_Login_InvalidUsernameError(t *testing.T) {
+	prng := rand.New(rand.NewSource(44477))
+	username := "waldo"
+	password := "hunter2"
+	salt := make([]byte, 32)
+	prng.Read(salt)
+
+	passwordHash := hashPassword(password, salt)
+
+	h, _ := newHandler(
+		"tmp", time.Hour, [][]string{{username, password}}, store.NewMemStore)
+
+	_, err := h.Login(&pb.RsAuthenticationRequest{
+		Username:     username + "extra junk",
+		PasswordHash: passwordHash,
+		Salt:         salt,
+	})
+	if !errors.Is(err, InvalidCredentialsErr) {
+		t.Errorf("Unexpected error for invalid username."+
+			"\nexpected: %v\nreceived: %+v", InvalidCredentialsErr, err)
+	}
 }
 
-func Test_handler_Write(t *testing.T) {
+func Test_handler_Write_Read(t *testing.T) {
+	h, token := newHandlerLogin(
+		time.Hour, "waldo", "hunter2", rand.New(rand.NewSource(4596)), t)
+
+	filePath := "dir1/dir2/fileA.txt"
+	contents := []byte("Lorem ipsum and such as it goes.")
+	ack, err := h.Write(&pb.RsWriteRequest{
+		Path:  filePath,
+		Data:  contents,
+		Token: token.Marshal(),
+	})
+	if err != nil {
+		t.Errorf("Failed to write: %+v", err)
+	} else if ack == nil {
+		t.Errorf("Received no ack: %+v", ack)
+	}
+
+	response, err := h.Read(&pb.RsReadRequest{
+		Path:  filePath,
+		Token: token.Marshal(),
+	})
+	if err != nil {
+		t.Errorf("Failed to read: %+v", err)
+	}
+
+	if !bytes.Equal(contents, response.GetData()) {
+		t.Errorf("Unexpected contents.\nexpected: %q\nreceived: %q",
+			contents, response.GetData())
+	}
 }
 
 func Test_handler_GetLastModified(t *testing.T) {
+	h, token := newHandlerLogin(
+		time.Hour, "waldo", "hunter2", rand.New(rand.NewSource(4596)), t)
+
+	filePath := "dir1/dir2/fileA.txt"
+	_, err := h.Write(&pb.RsWriteRequest{
+		Path:  filePath,
+		Data:  []byte("Lorem ipsum and such as it goes."),
+		Token: token.Marshal(),
+	})
+	if err != nil {
+		t.Errorf("Failed to write: %+v", err)
+	}
+
+	msg, err := h.GetLastModified(&pb.RsReadRequest{
+		Path:  filePath,
+		Token: token.Marshal(),
+	})
+	if err != nil {
+		t.Errorf("Failed to get last modified time: %+v", err)
+	}
+
+	ts := time.Unix(0, msg.GetTimestamp())
+	now := netTime.Now()
+	if !ts.Round(time.Second).Equal(now.Round(time.Second)) || now.Before(ts) {
+		t.Errorf("Modification time not near or before now."+
+			"\nnow:      %s\nreceived: %s", now, ts)
+	}
 }
 
 func Test_handler_GetLastWrite(t *testing.T) {
+	h, token := newHandlerLogin(
+		time.Hour, "waldo", "hunter2", rand.New(rand.NewSource(4596)), t)
+
+	_, err := h.Write(&pb.RsWriteRequest{
+		Path:  "dir1/dir2/fileA.txt",
+		Data:  []byte("Lorem ipsum and such as it goes."),
+		Token: token.Marshal(),
+	})
+	if err != nil {
+		t.Errorf("Failed to write: %+v", err)
+	}
+
+	msg, err := h.GetLastWrite(&pb.RsLastWriteRequest{Token: token.Marshal()})
+	if err != nil {
+		t.Errorf("Failed to get last write: %+v", err)
+	}
+
+	ts := time.Unix(0, msg.GetTimestamp())
+	now := netTime.Now()
+	if !ts.Round(time.Second).Equal(now.Round(time.Second)) || now.Before(ts) {
+		t.Errorf("Modification time not near or before now."+
+			"\nnow:      %s\nreceived: %s", now, ts)
+	}
 }
 
 func Test_handler_ReadDir(t *testing.T) {
+	h, token := newHandlerLogin(
+		time.Hour, "waldo", "hunter2", rand.New(rand.NewSource(4596)), t)
+
+	_, err := h.Write(&pb.RsWriteRequest{
+		Path:  "dir1/dir2/fileA.txt",
+		Data:  []byte("Lorem ipsum and such as it goes."),
+		Token: token.Marshal(),
+	})
+	if err != nil {
+		t.Errorf("Failed to write: %+v", err)
+	}
+
+	msg, err := h.ReadDir(&pb.RsReadRequest{
+		Path:  "dir1/",
+		Token: token.Marshal(),
+	})
+	if err != nil {
+		t.Errorf("Failed to read dir %s: %+v", "dir1/", err)
+	}
+
+	expected := []string{"dir2"}
+	if !reflect.DeepEqual(msg.GetData(), expected) {
+		t.Errorf("Unexpected directories.\nexpected: %s\nreceived: %s",
+			expected, msg.GetData())
+	}
+
 }
 
+// Tests handler.verifyUser with valid user.
 func Test_handler_verifyUser(t *testing.T) {
+	prng := rand.New(rand.NewSource(2))
+	username := "waldo"
+	password := "hunter2"
+	salt := make([]byte, 32)
+	prng.Read(salt)
+	passwordHash := hashPassword(password, salt)
+	h := &handler{
+		userPasswords: map[string]string{
+			username: password,
+		},
+	}
 
-	// h, _ := newHandler("storeDir", 64*time.Hour,
-	// 	[][]string{{"user", "pass"}}, store.NewMemStore)
+	err := h.verifyUser(username, passwordHash, salt)
+	if err != nil {
+		t.Errorf("Failed to verify user %s: %+v", username, err)
+	}
+}
+
+// Error path: Tests that handler.verifyUser returns InvalidCredentialsErr for
+// an invalid username.
+func Test_handler_verifyUser_InvalidUsernameError(t *testing.T) {
+	prng := rand.New(rand.NewSource(2))
+	username := "waldo"
+	password := "hunter2"
+	salt := make([]byte, 32)
+	prng.Read(salt)
+	passwordHash := hashPassword(password, salt)
+	h := &handler{
+		userPasswords: map[string]string{
+			username: password,
+		},
+	}
+
+	err := h.verifyUser(username+"junk", passwordHash, salt)
+	if !errors.Is(err, InvalidCredentialsErr) {
+		t.Errorf("Unexpected error.\nexpected: %v\nreceived: %+v",
+			InvalidCredentialsErr, err)
+	}
+}
+
+// Error path: Tests that handler.verifyUser returns InvalidCredentialsErr for
+// an invalid password.
+func Test_handler_verifyUser_InvalidPasswordError(t *testing.T) {
+	prng := rand.New(rand.NewSource(2))
+	username := "waldo"
+	password := "hunter2"
+	salt := make([]byte, 32)
+	prng.Read(salt)
+	passwordHash := hashPassword(password, salt)
+	h := &handler{
+		userPasswords: map[string]string{
+			username: password,
+		},
+	}
+
+	err := h.verifyUser(username, append(passwordHash, []byte("junk")...), salt)
+	if !errors.Is(err, InvalidCredentialsErr) {
+		t.Errorf("Unexpected error.\nexpected: %v\nreceived: %+v",
+			InvalidCredentialsErr, err)
+	}
 }
 
 func Test_handler_getStore(t *testing.T) {
 }
 
 func Test_handler_addStore(t *testing.T) {
+}
+
+func newHandlerLogin(ttl time.Duration, username, password string,
+	prng *rand.Rand, t testing.TB) (*handler, Token) {
+	salt := make([]byte, 32)
+	prng.Read(salt)
+	passwordHash := hashPassword(password, salt)
+
+	h, err := newHandler(
+		"tmp", ttl, [][]string{{username, password}}, store.NewMemStore)
+	if err != nil {
+		t.Fatalf("Failed to make new handler: %+v", err)
+	}
+	msg, err := h.Login(&pb.RsAuthenticationRequest{
+		Username:     username,
+		PasswordHash: passwordHash,
+		Salt:         salt,
+	})
+	if err != nil {
+		t.Fatalf("Failed to login: %+v", err)
+	}
+	return h, UnmarshalToken(msg.GetToken())
 }

@@ -16,8 +16,8 @@ import (
 )
 
 // Tests that UnmarshalToken unmarshalls bytes slices of all sizes into the
-// expected Token.
-func TestUnmarshalToken(t *testing.T) {
+// expected Token and the Token.Marshal output matches expected.
+func TestToken_Marshal_UnmarshalToken(t *testing.T) {
 	prng := rand.New(rand.NewSource(123456789))
 
 	tests := make([]struct{ b, expected []byte }, 100)
@@ -29,7 +29,7 @@ func TestUnmarshalToken(t *testing.T) {
 
 	for i, tt := range tests {
 		token := UnmarshalToken(tt.b)
-		if !bytes.Equal(tt.expected, token[:]) {
+		if !bytes.Equal(tt.expected, token.Marshal()) {
 			t.Errorf("Unexpected token (%d).\nexpected: %X\nreceived: %X",
 				i, tt.expected, token)
 		}
