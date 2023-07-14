@@ -8,6 +8,7 @@
 package cmd
 
 import (
+	"encoding/csv"
 	"fmt"
 	"io"
 	"log"
@@ -17,12 +18,26 @@ import (
 
 	"github.com/spf13/cobra"
 	jww "github.com/spf13/jwalterweatherman"
-	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	"gitlab.com/elixxir/remoteSyncServer/server"
 	"gitlab.com/xx_network/primitives/id"
 	"gitlab.com/xx_network/primitives/utils"
+)
+
+var configFilePath string
+
+const (
+	logPathFlag  = "logPath"
+	logLevelFlag = "logLevel"
+
+	signedCertPathTag = "signedCertPath"
+	signedKeyPathTag  = "signedKeyPath"
+	portTag           = "port"
+
+	tokenTtlTag        = "tokenTTL"
+	credentialsPathTag = "credentialsCsvPath"
+	storageDirTag      = "storageDir"
 )
 
 // Execute initialises all config files, flags, and logging and then starts the
@@ -45,6 +60,9 @@ var rootCmd = &cobra.Command{
 		// Obtain parameters
 		signedCertPath := viper.GetString(signedCertPathTag)
 		signedKeyPath := viper.GetString(signedKeyPathTag)
+		storageDir := viper.GetString(storageDirTag)
+		tokenTTL := viper.GetDuration(tokenTtlTag)
+		credentialsCsvPath := viper.GetString(credentialsPathTag)
 		localAddress :=
 			net.JoinHostPort("0.0.0.0", strconv.Itoa(viper.GetInt(portTag)))
 
@@ -60,6 +78,25 @@ var rootCmd = &cobra.Command{
 				signedKeyPath, err)
 		}
 
+		// Obtain credentials from CSV
+		csvPath, err := utils.ExpandPath(credentialsCsvPath)
+		if err != nil {
+			jww.FATAL.Panicf("Unable to expand path %s: %+v",
+				credentialsCsvPath, err)
+		}
+		f, err := os.Open(csvPath)
+		if err != nil {
+			jww.FATAL.Panicf("Unable to read input file %s: %+v",
+				csvPath, err)
+		}
+		csvReader := csv.NewReader(f)
+		records, err := csvReader.ReadAll()
+		if err != nil {
+			jww.FATAL.Panicf("Unable to parse file as CSV for %s: %+v",
+				credentialsCsvPath, err)
+		}
+		_ = f.Close()
+
 		// Start comms
 		s, err := server.NewServer(
 			&id.DummyUser, localAddress, signedCert, signedKey)
@@ -72,17 +109,6 @@ var rootCmd = &cobra.Command{
 		}
 	},
 }
-
-var configFilePath string
-
-const (
-	logPathFlag  = "logPath"
-	logLevelFlag = "logLevel"
-
-	signedCertPathTag = "signedCertPath"
-	signedKeyPathTag  = "signedKeyPath"
-	portTag           = "port"
-)
 
 // initConfig reads in config file from the file path.
 func initConfig(filePath string) {
@@ -143,33 +169,4 @@ func initLog(logPath string, threshold uint) {
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFilePath, "config", "c", "",
 		"File path to Custom configuration.")
-
-	rootCmd.PersistentFlags().StringP(logPathFlag, "l", "",
-		"File path to save log file to.")
-	bindPFlag(rootCmd.PersistentFlags(), logPathFlag, rootCmd.Use)
-
-	rootCmd.PersistentFlags().IntP(logLevelFlag, "v", 0,
-		"Verbosity level for log printing (2+ = Trace, 1 = Debug, 0 = Info).")
-	bindPFlag(rootCmd.PersistentFlags(), logLevelFlag, rootCmd.Use)
-
-	rootCmd.PersistentFlags().String(signedCertPathTag, "",
-		"Path to the PEM encoded certificate file.")
-	bindPFlag(rootCmd.PersistentFlags(), signedCertPathTag, rootCmd.Use)
-
-	rootCmd.PersistentFlags().String(signedKeyPathTag, "",
-		"Path to the PEM encoded key file.")
-	bindPFlag(rootCmd.PersistentFlags(), signedKeyPathTag, rootCmd.Use)
-
-	rootCmd.PersistentFlags().String(portTag, "",
-		"Local server port")
-	bindPFlag(rootCmd.PersistentFlags(), portTag, rootCmd.Use)
-}
-
-// bindPFlag binds the key to a pflag.Flag. Panics on error.
-func bindPFlag(flagSet *pflag.FlagSet, key, use string) {
-	err := viper.BindPFlag(key, flagSet.Lookup(key))
-	if err != nil {
-		jww.FATAL.Panicf(
-			"Failed to bind key %q to a pflag on %s: %+v", key, use, err)
-	}
 }
