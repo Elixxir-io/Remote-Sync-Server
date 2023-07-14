@@ -8,7 +8,9 @@
 package server
 
 import (
+	"errors"
 	"math/rand"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -39,6 +41,22 @@ func Test_newStoreInstance(t *testing.T) {
 	if !reflect.DeepEqual(expected, si) {
 		t.Errorf("Unexpected new storeInstance.\nexpected: %+v\nreceived: %+v",
 			expected, si)
+	}
+}
+
+// Error path: Tests that newStoreInstance returns store.NonLocalFileErr for a
+// non-local path.
+func Test_newStoreInstance_NonLocalFileError(t *testing.T) {
+	testDir := "tmp"
+	defer func() {
+		if err := os.RemoveAll(testDir); err != nil {
+			t.Fatalf("Failed to remove %s: %+v", testDir, err)
+		}
+	}()
+	_, err := newStoreInstance(
+		testDir, "user/../..", nonce.Nonce{}, store.NewFileStore)
+	if !errors.Is(err, store.NonLocalFileErr) {
+		t.Errorf("Failed to make new storeInstance: %+v", err)
 	}
 }
 

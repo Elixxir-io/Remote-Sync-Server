@@ -24,6 +24,8 @@ type storeInstance struct {
 
 // newStoreInstance creates a new store for the user that will expire after the
 // given TTL.
+//
+// Returns [store.NonLocalFileErr] if the file is outside the storage directory.
 func newStoreInstance(storageDir, username string, n nonce.Nonce,
 	newStore store.NewStore) (storeInstance, error) {
 	s, err := newStore(storageDir, username)
