@@ -4,9 +4,9 @@ The remote sync server is a self-run server for syncing Haven account data.
 
 ```yaml
 # Path where log file will be saved.
-logPath: "/tmp/remoteSyncServer.log""
+logPath: "/tmp/remoteSyncServer.log"
 # Level of debugging to print (0 = info, 1 = debug, >1 = trace).
-logLevel"
+logLevel: 1
 # Port for Sync Server to listen on. It must be the only listener on this port.
 port: 22841
 
