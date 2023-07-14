@@ -20,6 +20,9 @@ import (
 	"gitlab.com/xx_network/primitives/netTime"
 )
 
+// Tests that FileStore adheres to the Store interface.
+var _ Store = (*FileStore)(nil)
+
 // Unit test of NewFileStore.
 func TestNewFileStore(t *testing.T) {
 	expected := &FileStore{baseDir: "baseDir/"}
@@ -244,30 +247,34 @@ func TestFileStore_ReadDir(t *testing.T) {
 	fs := newTestFileStore("baseDir", testDir, t)
 	defer removeTestFile(t, testDir)
 
-	expectedDirs := []string{"dir1", "dir2", "dir3", filepath.Dir(fs.baseDir)}
-	testFiles := []string{
-		"hello.txt",
-		filepath.Join(expectedDirs[0], "test.txt"),
-		filepath.Join(expectedDirs[0], "dir2", "test.txt"),
-		filepath.Join(expectedDirs[1], "test.txt"),
-		filepath.Join(expectedDirs[2], "test.txt"),
-		filepath.Join(fs.baseDir, "test.txt"),
+	tests := []struct {
+		path string
+		dirs []string
+	}{
+		{"", []string{"dir1", "dir2", "dirD"}},
+		{"dir1", []string{"dirA", "dirB", "dirC"}},
+		{"dir1/dirB", []string{"dirB1", "dirB2"}},
+		{"dir1/dirB/dirB2", []string{}},
 	}
 
-	for _, path := range testFiles {
+	for i, path := range []string{"file", "dir1/a", "dir1/file", "dir1/dirA/a",
+		"dir1/dirB/dirB1/a", "dir1/dirB/dirB2/a", "dir1/dirC/file",
+		"dir2/dirC/a", "dirD/a"} {
 		if err := fs.Write(path, []byte("data")); err != nil {
-			t.Errorf("Failed to write data for path %s: %+v", path, err)
+			t.Errorf("Failed to write data for path %s (%d): %+v", path, i, err)
 		}
 	}
 
-	dirs, err := fs.ReadDir("")
-	if err != nil {
-		t.Errorf("Failed to read directory: %+v", err)
-	}
+	for i, tt := range tests {
+		dirs, err := fs.ReadDir(tt.path)
+		if err != nil {
+			t.Errorf("Failed to read directory: %+v", err)
+		}
 
-	if !reflect.DeepEqual(expectedDirs, dirs) {
-		t.Errorf("Unexpected directories.\nexpected: %s\nreceived: %s",
-			expectedDirs, dirs)
+		if !reflect.DeepEqual(dirs, tt.dirs) {
+			t.Errorf("Unexpected directory list for %s (%d)."+
+				"\nexpected: %s\nreceived: %s", tt.path, i, tt.dirs, dirs)
+		}
 	}
 }
 

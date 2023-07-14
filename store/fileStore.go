@@ -20,7 +20,8 @@ import (
 	"gitlab.com/xx_network/primitives/utils"
 )
 
-// FileStore manages the file storage in a base directory.
+// FileStore manages the file storage in a base directory. Adheres to the Store
+// interface.
 type FileStore struct {
 	baseDir       string
 	lastWritePath string
@@ -64,12 +65,12 @@ func (fs *FileStore) Read(path string) ([]byte, error) {
 func (fs *FileStore) Write(path string, data []byte) error {
 	path, err := fs.readyPath(path)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	err = utils.WriteFileDef(path, data)
 	if err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	fs.mux.Lock()
@@ -122,7 +123,7 @@ func (fs *FileStore) ReadDir(path string) ([]string, error) {
 		return nil, err
 	}
 
-	var files []string
+	files := make([]string, 0)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			files = append(files, entry.Name())
