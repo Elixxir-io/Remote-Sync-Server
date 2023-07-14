@@ -73,8 +73,7 @@ func (h *handler) Login(
 
 	err := h.addStore(token)
 	if err != nil {
-		// TODO: add error
-		return &pb.RsAuthenticationResponse{}, nil
+		return nil, err
 	}
 
 	return &pb.RsAuthenticationResponse{Token: string(token)}, nil
@@ -83,12 +82,12 @@ func (h *handler) Login(
 func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
 	s, err := h.getStore(Token(msg.GetToken()))
 	if err != nil {
-		return &pb.RsReadResponse{Error: err.Error()}, nil
+		return nil, err
 	}
 
 	data, err := s.Read(msg.GetPath())
 	if err != nil {
-		return &pb.RsReadResponse{Error: err.Error()}, nil
+		return nil, err
 	}
 
 	return &pb.RsReadResponse{Data: data}, nil
@@ -97,12 +96,12 @@ func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
 func (h *handler) Write(msg *pb.RsWriteRequest) (*pb.RsWriteResponse, error) {
 	s, err := h.getStore(Token(msg.GetToken()))
 	if err != nil {
-		return &pb.RsWriteResponse{Error: err.Error()}, nil
+		return nil, err
 	}
 
 	err = s.Write(msg.GetPath(), msg.GetData())
 	if err != nil {
-		return &pb.RsWriteResponse{Error: err.Error()}, nil
+		return nil, err
 	}
 
 	return &pb.RsWriteResponse{}, nil
@@ -112,12 +111,12 @@ func (h *handler) GetLastModified(
 	msg *pb.RsReadRequest) (*pb.RsTimestampResponse, error) {
 	s, err := h.getStore(Token(msg.GetToken()))
 	if err != nil {
-		return &pb.RsTimestampResponse{Error: err.Error()}, nil
+		return nil, err
 	}
 
 	lastModified, err := s.GetLastModified(msg.GetPath())
 	if err != nil {
-		return &pb.RsTimestampResponse{Error: err.Error()}, nil
+		return nil, err
 	}
 
 	return &pb.RsTimestampResponse{Timestamp: lastModified.UnixNano()}, nil
@@ -127,12 +126,12 @@ func (h *handler) GetLastWrite(
 	msg *pb.RsLastWriteRequest) (*pb.RsTimestampResponse, error) {
 	s, err := h.getStore(Token(msg.GetToken()))
 	if err != nil {
-		return &pb.RsTimestampResponse{Error: err.Error()}, nil
+		return nil, err
 	}
 
 	lastModified, err := s.GetLastWrite()
 	if err != nil {
-		return &pb.RsTimestampResponse{Error: err.Error()}, nil
+		return nil, err
 	}
 
 	return &pb.RsTimestampResponse{Timestamp: lastModified.UnixNano()}, nil
@@ -141,12 +140,12 @@ func (h *handler) GetLastWrite(
 func (h *handler) ReadDir(msg *pb.RsReadRequest) (*pb.RsReadDirResponse, error) {
 	s, err := h.getStore(Token(msg.GetToken()))
 	if err != nil {
-		return &pb.RsReadDirResponse{Error: err.Error()}, nil
+		return nil, err
 	}
 
 	directories, err := s.ReadDir(msg.GetToken())
 	if err != nil {
-		return &pb.RsReadDirResponse{Error: err.Error()}, nil
+		return nil, err
 	}
 
 	return &pb.RsReadDirResponse{Data: directories}, nil

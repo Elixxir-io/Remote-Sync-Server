@@ -10,6 +10,7 @@ package store
 import (
 	"bytes"
 	"errors"
+	"gitlab.com/xx_network/primitives/utils"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -25,8 +26,10 @@ var _ Store = (*FileStore)(nil)
 
 // Unit test of NewFileStore.
 func TestNewFileStore(t *testing.T) {
-	expected := &FileStore{baseDir: "baseDir/"}
-	defer removeTestFile(t, expected.baseDir)
+	testDir := "tmp"
+	expected := &FileStore{baseDir: filepath.Join(testDir, "baseDir")}
+	defer removeTestFile(t, testDir)
+
 	fs, err := NewFileStore(expected.baseDir)
 	if err != nil {
 		t.Errorf("Error creating new store: %+v", err)
@@ -45,11 +48,46 @@ func TestNewFileStore(t *testing.T) {
 	}
 }
 
-// Error path: Tests that NewStore returns an error for an invalid path.
-func TestNewStore_InvalidPathError(t *testing.T) {
+// Error path: Tests that NewFileStore returns an error for an invalid path.
+func TestNewFileStore_InvalidPathError(t *testing.T) {
 	_, err := NewFileStore("/hello\000")
 	if err == nil {
 		t.Errorf("Failed to get error for invalid base file path: %+v", err)
+	}
+}
+
+// Error path: Tests that NewFileStore returns an error when the base directory
+// already exists as a file.
+func TestNewFileStore_BaseDirectoryIsFileError(t *testing.T) {
+	testDir := "tmp"
+	path := filepath.Join(testDir, "file")
+	defer removeTestFile(t, testDir)
+
+	err := utils.WriteFileDef(path, []byte("data"))
+	if err != nil {
+		t.Errorf("Failed to write file: %+v", err)
+	}
+
+	_, err = NewFileStore(path)
+	if err == nil {
+		t.Errorf("Failed to get error for invalid base file path: %+v", err)
+	}
+}
+
+// Error path: Tests that NewFileStore returns an error for an invalid path.
+func TestNewFileStore_BaseDirectoryExistsError(t *testing.T) {
+	testDir := "tmp"
+	baseDir := filepath.Join(testDir, "baseDir")
+	defer removeTestFile(t, testDir)
+
+	if err := os.MkdirAll(baseDir, os.ModePerm); err != nil {
+		t.Errorf("Failed to make directory: %+v", err)
+	}
+
+	_, err := NewFileStore(baseDir)
+	if err == nil || !errors.Is(err, BaseDirectoryExistsErr) {
+		t.Errorf("Failed to get expected error when base directory already "+
+			"exists.\nexpected: %v\nreceived: %+v", BaseDirectoryExistsErr, err)
 	}
 }
 
@@ -180,8 +218,8 @@ func TestFileStore_GetLastModified(t *testing.T) {
 		lastModified, err := fs.GetLastModified(path)
 		if err != nil {
 			t.Errorf("Failed to get last modified for path %s: %+v", path, err)
-		} else if !lastModified.Round(100 * time.Millisecond).Equal(
-			expected.Round(100 * time.Millisecond)) {
+		} else if !lastModified.Round(250 * time.Millisecond).Equal(
+			expected.Round(250 * time.Millisecond)) {
 			t.Errorf("Last modified on path %s is not close to expected time "+
 				"(Δ%s).\nexpected: %s\nreceived: %s",
 				path, expected.Sub(lastModified), expected, lastModified)

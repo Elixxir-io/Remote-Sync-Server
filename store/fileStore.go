@@ -31,18 +31,21 @@ type FileStore struct {
 
 // NewFileStore creates a new FileStore at the specified base directory. This
 // function creates a new directory in the filesystem.
+//
+// Returns [BaseDirectoryExistsErr] if the base directory already exists.
 func NewFileStore(baseDir string) (*FileStore, error) {
-	fs := &FileStore{
-		baseDir: baseDir,
+	fs := &FileStore{baseDir: baseDir}
+
+	_, err := os.Stat(fs.baseDir)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, errors.WithStack(err)
+	} else if err == nil {
+		return nil, BaseDirectoryExistsErr
 	}
 
-	err := os.MkdirAll(fs.baseDir, 0700)
-	if err != nil {
-		return nil, errors.Wrapf(
-			err, "failed to make base directory %s", fs.baseDir)
-	}
-
-	return fs, nil
+	err = os.MkdirAll(fs.baseDir, 0700)
+	return fs, errors.Wrapf(
+		err, "failed to make base directory %s", fs.baseDir)
 }
 
 // Read reads from the provided file path and returns the data in the file at

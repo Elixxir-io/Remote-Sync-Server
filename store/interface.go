@@ -14,6 +14,11 @@ import (
 )
 
 var (
+	// BaseDirectoryExistsErr is returned when trying to create a new base
+	// directory with the same name of one that already exists in the
+	// filesystem.
+	BaseDirectoryExistsErr = errors.New("base directory already exists")
+
 	// NonLocalFileErr is returned when attempting to read or write to file or
 	// directory outside the base directory.
 	NonLocalFileErr = errors.New("file path not in local base directory")
