@@ -23,9 +23,9 @@ import (
 )
 
 var (
-	// NoStoreForTokenErr is returned when passed a token for a user that does
+	// InvalidTokenErr is returned when passed a token for a user that does
 	// not exist.
-	NoStoreForTokenErr = errors.New("no storage registered for the token")
+	InvalidTokenErr = errors.New("Invalid token, log in required")
 
 	// StoreAlreadyExistsErr is returned when passed a store with the given
 	// token already exists.
@@ -34,6 +34,14 @@ var (
 	// ExpiredTokenErr is returned if the user's token has reached the TTL
 	// duration and has been deleted.
 	ExpiredTokenErr = errors.New("token expired; log in again")
+
+	// InvalidUsernameErr is returned when a username does not match a
+	// registered user.
+	InvalidUsernameErr = errors.New("username does not match known user")
+
+	// InvalidPasswordErr is returned when a password hashed with a salt does
+	// not match the expected password hash.
+	InvalidPasswordErr = errors.New("invalid password")
 )
 
 // handler handles the server stores for each token/user.
@@ -66,6 +74,9 @@ func userRecordsToMap(records [][]string) map[string]string {
 	for _, line := range records {
 		users[line[0]] = line[1]
 	}
+	jww.DEBUG.Printf(
+		"Imported %d users from %d records.", len(users), len(records))
+
 	return users
 }
 
@@ -111,7 +122,7 @@ func (h *handler) Login(
 // [NoStoreForTokenErr] for an invalid token, and [ExpiredTokenErr] if the token
 // has expired.
 func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
-	jww.DEBUG.Printf("Received Read message: %s", msg)
+	jww.TRACE.Printf("Received Read message: %s", msg)
 
 	s, err := h.getStore(Token(msg.GetToken()))
 	if err != nil {
@@ -122,6 +133,7 @@ func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+	jww.TRACE.Printf("Received Read message: %s", msg)
 
 	return &pb.RsReadResponse{Data: data}, nil
 }
@@ -221,14 +233,14 @@ func (h *handler) verifyUser(username string, passwordHash, salt []byte) error {
 
 	clearTextPassword, exists := h.userPasswords[username]
 	if !exists {
-		return errors.Errorf("no user registered with username %q", username)
+		return InvalidUsernameErr
 	}
 
 	hh := hash.CMixHash.New()
 	hh.Write([]byte(clearTextPassword))
 	hh.Write(salt)
 	if !bytes.Equal(hh.Sum(nil), passwordHash) {
-		return errors.New("invalid password")
+		return InvalidPasswordErr
 	}
 
 	return nil
@@ -242,7 +254,7 @@ func (h *handler) getStore(t Token) (store.Store, error) {
 
 	s, exists := h.stores[t]
 	if !exists {
-		return nil, NoStoreForTokenErr
+		return nil, InvalidTokenErr
 	}
 
 	// If the store is no longer valid, then delete it and its token from their
