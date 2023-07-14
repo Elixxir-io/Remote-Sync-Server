@@ -89,8 +89,7 @@ var rootCmd = &cobra.Command{
 			jww.FATAL.Panicf("Unable to read input file %s: %+v",
 				csvPath, err)
 		}
-		csvReader := csv.NewReader(f)
-		records, err := csvReader.ReadAll()
+		records, err := csv.NewReader(f).ReadAll()
 		if err != nil {
 			jww.FATAL.Panicf("Unable to parse file as CSV for %s: %+v",
 				credentialsCsvPath, err)

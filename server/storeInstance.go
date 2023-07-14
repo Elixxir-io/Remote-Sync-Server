@@ -26,6 +26,8 @@ type storeInstance struct {
 	store.Store
 }
 
+// newStoreInstance creates a new store for the user that will expire after the
+// given TTL.
 func newStoreInstance(storageDir, username string, genTime time.Time,
 	ttl time.Duration) (storeInstance, error) {
 	s, err := store.NewFileStore(storageDir, username)

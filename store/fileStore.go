@@ -31,10 +31,7 @@ type FileStore struct {
 
 // NewFileStore creates a new FileStore at the specified base directory. This
 // function creates a new directory in the filesystem.
-//
-// Returns [BaseDirectoryExistsErr] if the base directory already exists.
 func NewFileStore(storageDir, baseDir string) (*FileStore, error) {
-	// TODO: test
 	baseDir, err := readyPath(storageDir, baseDir)
 	if err != nil {
 		return nil, err

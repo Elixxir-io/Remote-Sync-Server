@@ -40,8 +40,8 @@ type handler struct {
 	storageDir    string
 	tokenTTL      time.Duration
 	stores        map[Token]storeInstance
-	userTokens    map[string]Token
-	userPasswords map[string]string
+	userTokens    map[string]Token  // Map of username to token
+	userPasswords map[string]string // Map of username to password (from CSV)
 	mux           sync.Mutex
 }
 
@@ -194,6 +194,8 @@ func (h *handler) getStore(t Token) (store.Store, error) {
 		return nil, NoStoreForTokenErr
 	}
 
+	// If the store is no longer valid, then delete it and its token from their
+	// respective maps
 	if !s.IsValid() {
 		delete(h.stores, t)
 		delete(h.userTokens, s.username)
@@ -219,11 +221,10 @@ func (h *handler) addStore(username string, genTime time.Time,
 		return storeInstance{}, err
 	}
 
-	// If a token has been previously registered for this user, delete it and
-	// its storage
+	// If a token has been previously registered for this user, delete its store
+	// from the map
 	if oldToken, exists := h.userTokens[username]; exists {
 		delete(h.stores, oldToken)
-		delete(h.userTokens, username)
 	}
 
 	h.stores[token] = s

@@ -10,8 +10,9 @@ package server
 import (
 	"encoding/base64"
 	"encoding/binary"
-	"gitlab.com/elixxir/crypto/hash"
 	"time"
+
+	"gitlab.com/elixxir/crypto/hash"
 )
 
 // Token that identifies a user. It is unique and generated from a user's
