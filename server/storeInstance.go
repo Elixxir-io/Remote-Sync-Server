@@ -45,7 +45,7 @@ func newStoreInstance(storageDir, username string, genTime time.Time,
 	}, nil
 }
 
-// IsValid checks that the nonce has not expired
-func (si storeInstance) IsValid() bool {
+// isValid checks that the nonce has not expired
+func (si storeInstance) isValid() bool {
 	return netTime.Now().Before(si.expiryTime)
 }

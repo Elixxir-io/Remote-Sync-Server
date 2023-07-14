@@ -263,7 +263,7 @@ func (h *handler) getStore(t Token) (store.Store, error) {
 
 	// If the store is no longer valid, then delete it and its token from their
 	// respective maps
-	if !s.IsValid() {
+	if !s.isValid() {
 		delete(h.stores, t)
 		delete(h.userTokens, s.username)
 		return nil, ExpiredTokenErr
