@@ -274,31 +274,35 @@ func (h *handler) addStore(username string, tokenTTL time.Duration) (
 	h.mux.Lock()
 	defer h.mux.Unlock()
 
+	// Generate a new nonce and token
 	n, err := nonce.NewNonce(uint(tokenTTL.Seconds()))
 	if err != nil {
 		return storeInstance{}, err
 	}
 	token := Token(n.Value)
 
+	// The token should always be unique; this error should never occur
 	if _, exists := h.stores[token]; !exists {
 		return storeInstance{}, StoreAlreadyExistsErr
 	}
 
-	s, err := newStoreInstance(h.storageDir, username, n, h.newStore)
-	if err != nil {
-		return storeInstance{}, err
-	}
-
-	// If a token has been previously registered for this user, delete its store
-	// from the map
 	if oldToken, exists := h.userTokens[username]; exists {
+		// If an old token is registered, update the token in the stores map
 		jww.DEBUG.Printf(
 			"Deleting old store for %s after overwriting token.", username)
+		h.stores[token] = h.stores[oldToken]
 		delete(h.stores, oldToken)
+	} else {
+		// If no token exists, create a new store instance and put in the map
+		si, err := newStoreInstance(h.storageDir, username, n, h.newStore)
+		if err != nil {
+			return storeInstance{}, err
+		}
+		h.stores[token] = si
 	}
 
-	h.stores[token] = s
+	// Update to the newest token
 	h.userTokens[username] = token
 
-	return s, nil
+	return h.stores[token], nil
 }
