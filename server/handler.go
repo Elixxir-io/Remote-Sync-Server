@@ -69,10 +69,16 @@ func userRecordsToMap(records [][]string) map[string]string {
 	return users
 }
 
+// Login is called when a new [mixmessages.RsAuthenticationRequest] is received.
+// It authenticates the username and password, initializes storage for the user,
+// and returns to them a unique token used to interact with the server and an
+// expiration time. When a token expires, a user must log in again to get issues
+// a new token.
 func (h *handler) Login(
 	msg *pb.RsAuthenticationRequest) (*pb.RsAuthenticationResponse, error) {
 	jww.DEBUG.Printf("Received Login message: %s", msg)
 
+	// Verify user exists and password is correct
 	err := h.verifyUser(msg.GetUsername(), msg.GetPasswordHash(), msg.GetSalt())
 	if err != nil {
 		return nil, err
@@ -97,6 +103,13 @@ func (h *handler) Login(
 	}, nil
 }
 
+// Read reads from the provided file path and returns the data in the file
+// at that path.
+//
+// An error is returned if it fails to read the file. Returns
+// [store.NonLocalFileErr] if the file is outside the base path,
+// [NoStoreForTokenErr] for an invalid token, and [ExpiredTokenErr] if the token
+// has expired.
 func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
 	jww.DEBUG.Printf("Received Read message: %s", msg)
 
@@ -113,6 +126,11 @@ func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
 	return &pb.RsReadResponse{Data: data}, nil
 }
 
+// Write writes the provided data to the file path.
+//
+// An error is returned if the write fails. Returns [store.NonLocalFileErr] if
+// the file is outside the base path, [NoStoreForTokenErr] for an invalid token,
+// and [ExpiredTokenErr] if the token has expired.
 func (h *handler) Write(msg *pb.RsWriteRequest) (*messages.Ack, error) {
 	jww.DEBUG.Printf("Received Write message: %s", msg)
 
@@ -129,6 +147,12 @@ func (h *handler) Write(msg *pb.RsWriteRequest) (*messages.Ack, error) {
 	return &messages.Ack{}, nil
 }
 
+// GetLastModified returns the last modification time for the file at the
+// given file.
+//
+// Returns [store.NonLocalFileErr] if the file is outside the base path,
+// [NoStoreForTokenErr] for an invalid token, and [ExpiredTokenErr] if the token
+// has expired.
 func (h *handler) GetLastModified(
 	msg *pb.RsReadRequest) (*pb.RsTimestampResponse, error) {
 	jww.DEBUG.Printf("Received GetLastModified message: %s", msg)
@@ -146,6 +170,11 @@ func (h *handler) GetLastModified(
 	return &pb.RsTimestampResponse{Timestamp: lastModified.UnixNano()}, nil
 }
 
+// GetLastWrite returns the time of the most recent successful Write
+// operation that was performed.
+//
+// Returns [NoStoreForTokenErr] for an invalid token, and [ExpiredTokenErr] if
+// the token has expired.
 func (h *handler) GetLastWrite(
 	msg *pb.RsLastWriteRequest) (*pb.RsTimestampResponse, error) {
 	jww.DEBUG.Printf("Received GetLastWrite message: %s", msg)
@@ -163,6 +192,12 @@ func (h *handler) GetLastWrite(
 	return &pb.RsTimestampResponse{Timestamp: lastModified.UnixNano()}, nil
 }
 
+// ReadDir reads the named directory, returning all its directory entries
+// sorted by filename.
+//
+// Returns [store.NonLocalFileErr] if the file is outside the base path,
+// [NoStoreForTokenErr] for an invalid token, and [ExpiredTokenErr] if the token
+// has expired.
 func (h *handler) ReadDir(msg *pb.RsReadRequest) (*pb.RsReadDirResponse, error) {
 	jww.DEBUG.Printf("Received ReadDir message: %s", msg)
 

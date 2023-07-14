@@ -17,6 +17,7 @@ import (
 	"gitlab.com/xx_network/primitives/id"
 )
 
+// Server contains the comms server and handler.
 type Server struct {
 	h       *handler
 	comms   *server.Comms
