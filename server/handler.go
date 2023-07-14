@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	jww "github.com/spf13/jwalterweatherman"
 
 	pb "gitlab.com/elixxir/comms/mixmessages"
 	"gitlab.com/elixxir/crypto/hash"
@@ -70,6 +71,8 @@ func userRecordsToMap(records [][]string) map[string]string {
 
 func (h *handler) Login(
 	msg *pb.RsAuthenticationRequest) (*pb.RsAuthenticationResponse, error) {
+	jww.DEBUG.Printf("Received Login message: %s", msg)
+
 	err := h.verifyUser(msg.GetUsername(), msg.GetPasswordHash(), msg.GetSalt())
 	if err != nil {
 		return nil, err
@@ -85,6 +88,9 @@ func (h *handler) Login(
 		return nil, err
 	}
 
+	jww.INFO.Printf("Added store for user %s that expires at %s",
+		msg.GetUsername(), s.expiryTime)
+
 	return &pb.RsAuthenticationResponse{
 		Token:     string(token),
 		ExpiresAt: s.expiryTime.UnixNano(),
@@ -92,6 +98,8 @@ func (h *handler) Login(
 }
 
 func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
+	jww.DEBUG.Printf("Received Read message: %s", msg)
+
 	s, err := h.getStore(Token(msg.GetToken()))
 	if err != nil {
 		return nil, err
@@ -106,6 +114,8 @@ func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
 }
 
 func (h *handler) Write(msg *pb.RsWriteRequest) (*messages.Ack, error) {
+	jww.DEBUG.Printf("Received Write message: %s", msg)
+
 	s, err := h.getStore(Token(msg.GetToken()))
 	if err != nil {
 		return nil, err
@@ -121,6 +131,8 @@ func (h *handler) Write(msg *pb.RsWriteRequest) (*messages.Ack, error) {
 
 func (h *handler) GetLastModified(
 	msg *pb.RsReadRequest) (*pb.RsTimestampResponse, error) {
+	jww.DEBUG.Printf("Received GetLastModified message: %s", msg)
+
 	s, err := h.getStore(Token(msg.GetToken()))
 	if err != nil {
 		return nil, err
@@ -136,6 +148,8 @@ func (h *handler) GetLastModified(
 
 func (h *handler) GetLastWrite(
 	msg *pb.RsLastWriteRequest) (*pb.RsTimestampResponse, error) {
+	jww.DEBUG.Printf("Received GetLastWrite message: %s", msg)
+
 	s, err := h.getStore(Token(msg.GetToken()))
 	if err != nil {
 		return nil, err
@@ -150,6 +164,8 @@ func (h *handler) GetLastWrite(
 }
 
 func (h *handler) ReadDir(msg *pb.RsReadRequest) (*pb.RsReadDirResponse, error) {
+	jww.DEBUG.Printf("Received ReadDir message: %s", msg)
+
 	s, err := h.getStore(Token(msg.GetToken()))
 	if err != nil {
 		return nil, err
@@ -224,6 +240,8 @@ func (h *handler) addStore(username string, genTime time.Time,
 	// If a token has been previously registered for this user, delete its store
 	// from the map
 	if oldToken, exists := h.userTokens[username]; exists {
+		jww.DEBUG.Printf(
+			"Deleting old store for %s after overwriting token.", username)
 		delete(h.stores, oldToken)
 	}
 
