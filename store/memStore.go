@@ -32,12 +32,12 @@ type memFile struct {
 }
 
 // NewMemStore creates a new MemStore at the specified base directory.
-func NewMemStore() *MemStore {
+func NewMemStore(_ string, _ string) (Store, error) {
 	ms := &MemStore{
 		store: make(map[string]memFile),
 	}
 
-	return ms
+	return ms, nil
 }
 
 // Read reads from the provided file path and returns the data in the file at

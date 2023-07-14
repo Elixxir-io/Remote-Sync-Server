@@ -31,7 +31,9 @@ type FileStore struct {
 
 // NewFileStore creates a new FileStore at the specified base directory. This
 // function creates a new directory in the filesystem.
-func NewFileStore(storageDir, baseDir string) (*FileStore, error) {
+//
+// Returns [NonLocalFileErr] if the file is outside the storage directory.
+func NewFileStore(storageDir, baseDir string) (Store, error) {
 	baseDir, err := readyPath(storageDir, baseDir)
 	if err != nil {
 		return nil, err

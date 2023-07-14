@@ -19,6 +19,12 @@ var (
 	NonLocalFileErr = errors.New("file path not in local base directory")
 )
 
+// NewStore generates a new Store for the given base directory that will be
+// created in the storage directory.
+//
+// Returns [NonLocalFileErr] if the file is outside the storage directory.
+type NewStore func(storageDir, baseDir string) (Store, error)
+
 // Store copies the [collective.RemoteStore] interface.
 type Store interface {
 	// Read reads from the provided file path and returns the data in the file

@@ -27,7 +27,7 @@ var _ Store = (*MemStore)(nil)
 // Unit test of NewMemStore.
 func TestNewMemStore(t *testing.T) {
 	expected := &MemStore{store: make(map[string]memFile)}
-	ms := NewMemStore()
+	ms, _ := NewMemStore("", "")
 
 	if !reflect.DeepEqual(expected, ms) {
 		t.Errorf("Unexpected new MemStore.\nexpected: %+v\nrecieved: %+v",
@@ -40,7 +40,7 @@ func TestNewMemStore(t *testing.T) {
 // on each write.
 func TestMemStore_Write_Read(t *testing.T) {
 	prng := rand.New(rand.NewSource(365785))
-	ms := NewMemStore()
+	ms, _ := NewMemStore("", "")
 
 	testFiles := map[string][]byte{
 		"hello.txt":                    []byte(randString(1+prng.Intn(12), prng)),
@@ -52,9 +52,9 @@ func TestMemStore_Write_Read(t *testing.T) {
 		err := ms.Write(path, data)
 		if err != nil {
 			t.Errorf("Failed to write data for path %s: %+v", path, err)
-		} else if ms.lastWritePath != path {
+		} else if ms.(*MemStore).lastWritePath != path {
 			t.Errorf("lastWritePath not updated.\nexpected: %s\nreceived: %s",
-				path, ms.lastWritePath)
+				path, ms.(*MemStore).lastWritePath)
 		}
 	}
 
@@ -72,7 +72,7 @@ func TestMemStore_Write_Read(t *testing.T) {
 // Error path: Tests that MemStore.Read returns os.ErrNotExist if the file does
 // not exist.
 func TestMemStore_Read_ErrNotExist(t *testing.T) {
-	ms := NewMemStore()
+	ms, _ := NewMemStore("", "")
 	_, err := ms.Read("no file")
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("Unexpected error for non-local file."+
@@ -84,7 +84,7 @@ func TestMemStore_Read_ErrNotExist(t *testing.T) {
 // taken before MemStore.Write is called.
 func TestMemStore_GetLastModified(t *testing.T) {
 	prng := rand.New(rand.NewSource(365785))
-	ms := NewMemStore()
+	ms, _ := NewMemStore("", "")
 
 	testFiles := make(map[string]time.Time)
 	for i := 0; i < 20; i++ {
@@ -112,7 +112,7 @@ func TestMemStore_GetLastModified(t *testing.T) {
 // Error path: Tests that MemStore.GetLastModified returns os.ErrNotExist if the
 // file does not exist.
 func TestMemStore_GetLastModified_ErrNotExist(t *testing.T) {
-	ms := NewMemStore()
+	ms, _ := NewMemStore("", "")
 	_, err := ms.GetLastModified("no file")
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("Unexpected error for non-local file."+
@@ -124,7 +124,7 @@ func TestMemStore_GetLastModified_ErrNotExist(t *testing.T) {
 // taken before MemStore.Write is called on the most recent write.
 func TestMemStore_GetLastWrite(t *testing.T) {
 	prng := rand.New(rand.NewSource(365785))
-	ms := NewMemStore()
+	ms, _ := NewMemStore("", "")
 
 	for i := 0; i < 20; i++ {
 		timeNow := netTime.Now()
@@ -148,7 +148,7 @@ func TestMemStore_GetLastWrite(t *testing.T) {
 
 // Tests that MemStore.ReadDir returns all the expected directories.
 func TestMemStore_ReadDir(t *testing.T) {
-	ms := NewMemStore()
+	ms, _ := NewMemStore("", "")
 
 	tests := []struct {
 		path string

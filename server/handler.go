@@ -51,18 +51,22 @@ type handler struct {
 	stores        map[Token]storeInstance
 	userTokens    map[string]Token  // Map of username to token
 	userPasswords map[string]string // Map of username to password (from CSV)
+	newStore      store.NewStore
 	mux           sync.Mutex
 }
 
 // newHandler generates a new store handler.
-func newHandler(
-	storageDir string, tokenTTL time.Duration, userRecords [][]string) *handler {
+//
+// Pass in Store.NewMemStore into newStore for testing.
+func newHandler(storageDir string, tokenTTL time.Duration,
+	userRecords [][]string, newStore store.NewStore) *handler {
 	return &handler{
 		storageDir:    storageDir,
 		tokenTTL:      tokenTTL,
 		stores:        make(map[Token]storeInstance),
 		userTokens:    make(map[string]Token),
 		userPasswords: userRecordsToMap(userRecords),
+		newStore:      newStore,
 	}
 }
 
@@ -279,7 +283,8 @@ func (h *handler) addStore(username string, genTime time.Time,
 		return storeInstance{}, StoreAlreadyExistsErr
 	}
 
-	s, err := newStoreInstance(h.storageDir, username, genTime, tokenTTL)
+	s, err :=
+		newStoreInstance(h.storageDir, username, genTime, tokenTTL, h.newStore)
 	if err != nil {
 		return storeInstance{}, err
 	}
