@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 
 	"gitlab.com/elixxir/comms/remoteSync/server"
+	"gitlab.com/elixxir/remoteSyncServer/store"
 	"gitlab.com/xx_network/primitives/id"
 )
 
@@ -34,7 +35,7 @@ func NewServer(storageDir string, tokenTTL time.Duration, userRecords [][]string
 			"key pair from the cert and key: %+v", err)
 	}
 
-	h := newHandler(storageDir, tokenTTL, userRecords)
+	h := newHandler(storageDir, tokenTTL, userRecords, store.NewFileStore)
 	s := &Server{
 		h:       h,
 		comms:   server.StartRemoteSync(id, localServer, h, certPem, keyPem),
