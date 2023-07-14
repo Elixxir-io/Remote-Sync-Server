@@ -8,7 +8,7 @@ require (
 	github.com/spf13/jwalterweatherman v1.1.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.16.0
-	gitlab.com/elixxir/comms v0.0.4-0.20230713210734-9d83a7e2904a
+	gitlab.com/elixxir/comms v0.0.4-0.20230714163129-779a464fd627
 	gitlab.com/xx_network/primitives v0.0.4-0.20230710164512-888a035f126d
 )
 

@@ -98,7 +98,7 @@ var rootCmd = &cobra.Command{
 		_ = f.Close()
 
 		// Start comms
-		s, err := server.NewServer(
+		s, err := server.NewServer(storageDir, tokenTTL, records,
 			&id.DummyUser, localAddress, signedCert, signedKey)
 		if err != nil {
 			jww.FATAL.Panicf("Failed to create new server: %+v", err)

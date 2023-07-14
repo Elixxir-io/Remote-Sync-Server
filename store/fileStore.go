@@ -33,19 +33,21 @@ type FileStore struct {
 // function creates a new directory in the filesystem.
 //
 // Returns [BaseDirectoryExistsErr] if the base directory already exists.
-func NewFileStore(baseDir string) (*FileStore, error) {
+func NewFileStore(storageDir, baseDir string) (*FileStore, error) {
+	// TODO: test
+	baseDir, err := readyPath(storageDir, baseDir)
+	if err != nil {
+		return nil, err
+	}
 	fs := &FileStore{baseDir: baseDir}
 
-	_, err := os.Stat(fs.baseDir)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, errors.WithStack(err)
-	} else if err == nil {
-		return nil, BaseDirectoryExistsErr
+	err = os.MkdirAll(fs.baseDir, 0700)
+	if err != nil {
+		return nil, errors.Wrapf(
+			err, "failed to make base directory %s", fs.baseDir)
 	}
 
-	err = os.MkdirAll(fs.baseDir, 0700)
-	return fs, errors.Wrapf(
-		err, "failed to make base directory %s", fs.baseDir)
+	return fs, nil
 }
 
 // Read reads from the provided file path and returns the data in the file at
@@ -139,20 +141,28 @@ func (fs *FileStore) ReadDir(path string) ([]string, error) {
 // readyPath makes the path relative to the base directory and ensures it is
 // local. Returns NonLocalFileErr if the file is outside the base path.
 func (fs *FileStore) readyPath(path string) (string, error) {
-	path = filepath.Join(fs.baseDir, path)
-	if !fs.isLocalFile(path) {
-		return "", NonLocalFileErr
-	}
-	return path, nil
+	return readyPath(fs.baseDir, path)
 }
 
 // isLocalFile determines if the file path is local to the base directory.
 // Returns NonLocalFileErr if the file is outside the base path.
 func (fs *FileStore) isLocalFile(path string) bool {
-	rel, err := filepath.Rel(fs.baseDir, path)
+	return isLocalFile(fs.baseDir, path)
+}
+
+func readyPath(baseDir, path string) (string, error) {
+	path = filepath.Join(baseDir, path)
+	if !isLocalFile(baseDir, path) {
+		return "", NonLocalFileErr
+	}
+	return path, nil
+}
+
+func isLocalFile(baseDir, path string) bool {
+	rel, err := filepath.Rel(baseDir, path)
 	if err != nil {
 		jww.WARN.Printf("Failed to get relative path of %s to base %s: %+v",
-			path, fs.baseDir, err)
+			path, baseDir, err)
 		return false
 	} else if strings.HasPrefix(rel, "..") {
 		return false

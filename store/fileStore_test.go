@@ -30,7 +30,7 @@ func TestNewFileStore(t *testing.T) {
 	expected := &FileStore{baseDir: filepath.Join(testDir, "baseDir")}
 	defer removeTestFile(t, testDir)
 
-	fs, err := NewFileStore(expected.baseDir)
+	fs, err := NewFileStore(testDir, "baseDir")
 	if err != nil {
 		t.Errorf("Error creating new store: %+v", err)
 	}
@@ -50,7 +50,7 @@ func TestNewFileStore(t *testing.T) {
 
 // Error path: Tests that NewFileStore returns an error for an invalid path.
 func TestNewFileStore_InvalidPathError(t *testing.T) {
-	_, err := NewFileStore("/hello\000")
+	_, err := NewFileStore("tmp", "/hello\000")
 	if err == nil {
 		t.Errorf("Failed to get error for invalid base file path: %+v", err)
 	}
@@ -68,26 +68,19 @@ func TestNewFileStore_BaseDirectoryIsFileError(t *testing.T) {
 		t.Errorf("Failed to write file: %+v", err)
 	}
 
-	_, err = NewFileStore(path)
+	_, err = NewFileStore(testDir, "file")
 	if err == nil {
 		t.Errorf("Failed to get error for invalid base file path: %+v", err)
 	}
 }
 
-// Error path: Tests that NewFileStore returns an error for an invalid path.
-func TestNewFileStore_BaseDirectoryExistsError(t *testing.T) {
-	testDir := "tmp"
-	baseDir := filepath.Join(testDir, "baseDir")
-	defer removeTestFile(t, testDir)
-
-	if err := os.MkdirAll(baseDir, os.ModePerm); err != nil {
-		t.Errorf("Failed to make directory: %+v", err)
-	}
-
-	_, err := NewFileStore(baseDir)
-	if err == nil || !errors.Is(err, BaseDirectoryExistsErr) {
-		t.Errorf("Failed to get expected error when base directory already "+
-			"exists.\nexpected: %v\nreceived: %+v", BaseDirectoryExistsErr, err)
+// Error path: Tests that NewFileStore returns NonLocalFileErr when the path is
+// not local to the base directory.
+func TestNewFileStore_NonLocalPathError(t *testing.T) {
+	_, err := NewFileStore("tmp", "../file")
+	if !errors.Is(err, NonLocalFileErr) {
+		t.Errorf("Unexpected error for non-local file."+
+			"\nexpected: %v\nreceived: %v", NonLocalFileErr, err)
 	}
 }
 
@@ -394,7 +387,7 @@ func TestFileStore_isLocalFile(t *testing.T) {
 
 // newTestFileStore creates a new FileStore for testing purposes.
 func newTestFileStore(baseDir, testDir string, t testing.TB) *FileStore {
-	fs, err := NewFileStore(filepath.Join(testDir, baseDir))
+	fs, err := NewFileStore(testDir, baseDir)
 	if err != nil {
 		t.Fatalf("Failed to create new FileStore: %+v", err)
 	}

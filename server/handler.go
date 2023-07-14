@@ -8,19 +8,18 @@
 package server
 
 import (
+	"bytes"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 
 	pb "gitlab.com/elixxir/comms/mixmessages"
+	"gitlab.com/elixxir/crypto/hash"
 	"gitlab.com/elixxir/remoteSyncServer/store"
+	"gitlab.com/xx_network/comms/messages"
+	"gitlab.com/xx_network/primitives/netTime"
 )
-
-// handler handles the server stores for each token/user.
-type handler struct {
-	stores map[Token]store.Store
-	mux    sync.Mutex
-}
 
 var (
 	// NoStoreForTokenErr is returned when passed a token for a user that does
@@ -30,53 +29,67 @@ var (
 	// StoreAlreadyExistsErr is returned when passed a store with the given
 	// token already exists.
 	StoreAlreadyExistsErr = errors.New("store with token already exists")
+
+	// ExpiredTokenErr is returned if the user's token has reached the TTL
+	// duration and has been deleted.
+	ExpiredTokenErr = errors.New("token expired; log in again")
 )
 
-// getStore returns the store for the given token or NoStoreForTokenErr if it
-// does not exist.
-func (h *handler) getStore(t Token) (store.Store, error) {
-	h.mux.Lock()
-	defer h.mux.Unlock()
-
-	s, exists := h.stores[t]
-	if !exists {
-		return nil, NoStoreForTokenErr
-	}
-
-	return s, nil
+// handler handles the server stores for each token/user.
+type handler struct {
+	storageDir string
+	tokenTTL   time.Duration
+	stores     map[Token]storeInstance
+	users      map[string]string
+	mux        sync.Mutex
 }
 
-// addStore adds a new store for the given token. Returns StoreAlreadyExistsErr
-// if one already exists for the token.
-func (h *handler) addStore(t Token) error {
-	h.mux.Lock()
-	defer h.mux.Unlock()
-
-	if _, exists := h.stores[t]; !exists {
-		return StoreAlreadyExistsErr
+// newHandler generates a new store handler.
+func newHandler(
+	storageDir string, tokenTTL time.Duration, userRecords [][]string) *handler {
+	return &handler{
+		storageDir: storageDir,
+		tokenTTL:   tokenTTL,
+		stores:     make(map[Token]storeInstance),
+		users:      userRecordsToMap(userRecords),
 	}
+}
 
-	s, err := store.NewFileStore(string(t))
-	if err != nil {
-		return err
+// userRecordsToMap converts the username/password records from a CSV to a map
+// of passwords keyed on each username. Note that this will overwrite any
+// passwords with duplicate usernames.
+func userRecordsToMap(records [][]string) map[string]string {
+	users := make(map[string]string, len(records))
+	for _, line := range records {
+		users[line[0]] = line[1]
 	}
-
-	h.stores[t] = s
-
-	return nil
+	return users
 }
 
 func (h *handler) Login(
 	msg *pb.RsAuthenticationRequest) (*pb.RsAuthenticationResponse, error) {
-	// TODO generate token
-	token := GenerateToken(msg.GetPath(), msg.GetPassword())
 
-	err := h.addStore(token)
+	err := h.verifyUser(msg.GetUsername(), msg.GetPasswordHash(), msg.GetSalt())
 	if err != nil {
 		return nil, err
 	}
 
-	return &pb.RsAuthenticationResponse{Token: string(token)}, nil
+	// Generate token
+	genTime := netTime.Now()
+	token := GenerateToken(msg.GetUsername(), msg.GetPasswordHash(), genTime)
+
+	// Add token to store
+	s, err := h.addStore(msg.GetUsername(), genTime, h.tokenTTL, token)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: if the store already exists with a different token, figure out how to delete it
+
+	return &pb.RsAuthenticationResponse{
+		Token:     string(token),
+		ExpiresAt: s.expiryTime.UnixNano(),
+	}, nil
 }
 
 func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
@@ -93,7 +106,7 @@ func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
 	return &pb.RsReadResponse{Data: data}, nil
 }
 
-func (h *handler) Write(msg *pb.RsWriteRequest) (*pb.RsWriteResponse, error) {
+func (h *handler) Write(msg *pb.RsWriteRequest) (*messages.Ack, error) {
 	s, err := h.getStore(Token(msg.GetToken()))
 	if err != nil {
 		return nil, err
@@ -104,7 +117,7 @@ func (h *handler) Write(msg *pb.RsWriteRequest) (*pb.RsWriteResponse, error) {
 		return nil, err
 	}
 
-	return &pb.RsWriteResponse{}, nil
+	return &messages.Ack{}, nil
 }
 
 func (h *handler) GetLastModified(
@@ -149,4 +162,64 @@ func (h *handler) ReadDir(msg *pb.RsReadRequest) (*pb.RsReadDirResponse, error) 
 	}
 
 	return &pb.RsReadDirResponse{Data: directories}, nil
+}
+
+// verifyUser verifies the username and password are correct.
+func (h *handler) verifyUser(username string, passwordHash, salt []byte) error {
+	h.mux.Lock()
+	defer h.mux.Unlock()
+
+	clearTextPassword, exists := h.users[username]
+	if !exists {
+		return errors.Errorf("no user registered with username %q", username)
+	}
+
+	hh := hash.CMixHash.New()
+	hh.Write([]byte(clearTextPassword))
+	hh.Write(salt)
+	if !bytes.Equal(hh.Sum(nil), passwordHash) {
+		return errors.New("invalid password")
+	}
+
+	return nil
+}
+
+// getStore returns the store for the given token. Returns [NoStoreForTokenErr]
+// if it does not exist or [ExpiredTokenErr] if the token has expired.
+func (h *handler) getStore(t Token) (store.Store, error) {
+	h.mux.Lock()
+	defer h.mux.Unlock()
+
+	s, exists := h.stores[t]
+	if !exists {
+		return nil, NoStoreForTokenErr
+	}
+
+	if !s.IsValid() {
+		delete(h.stores, t)
+		return nil, ExpiredTokenErr
+	}
+
+	return s, nil
+}
+
+// addStore adds a new store for the given token. Returns StoreAlreadyExistsErr
+// if one already exists for the token.
+func (h *handler) addStore(username string, genTime time.Time,
+	tokenTTL time.Duration, token Token) (storeInstance, error) {
+	h.mux.Lock()
+	defer h.mux.Unlock()
+
+	if _, exists := h.stores[token]; !exists {
+		return storeInstance{}, StoreAlreadyExistsErr
+	}
+
+	s, err := newStoreInstance(h.storageDir, username, genTime, tokenTTL)
+	if err != nil {
+		return storeInstance{}, err
+	}
+
+	h.stores[token] = s
+
+	return s, nil
 }

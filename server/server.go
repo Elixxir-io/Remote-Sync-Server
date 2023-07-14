@@ -9,11 +9,11 @@ package server
 
 import (
 	"crypto/tls"
+	"time"
 
 	"github.com/pkg/errors"
 
 	"gitlab.com/elixxir/comms/remoteSync/server"
-	"gitlab.com/elixxir/remoteSyncServer/store"
 	"gitlab.com/xx_network/primitives/id"
 )
 
@@ -25,7 +25,7 @@ type Server struct {
 
 // NewServer generates a new server with a remote sync comms server. Returns an
 // error if the key pair cannot be generated.
-func NewServer(
+func NewServer(storageDir string, tokenTTL time.Duration, userRecords [][]string,
 	id *id.ID, localServer string, certPem, keyPem []byte) (*Server, error) {
 	keyPair, err := tls.X509KeyPair(certPem, keyPem)
 	if err != nil {
@@ -33,7 +33,7 @@ func NewServer(
 			"key pair from the cert and key: %+v", err)
 	}
 
-	h := &handler{stores: make(map[Token]store.Store)}
+	h := newHandler(storageDir, tokenTTL, userRecords)
 	s := &Server{
 		h:       h,
 		comms:   server.StartRemoteSync(id, localServer, h, certPem, keyPem),
