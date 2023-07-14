@@ -41,7 +41,7 @@ var (
 type handler struct {
 	storageDir    string
 	tokenTTL      time.Duration
-	stores        map[Token]storeInstance
+	stores        map[Token]*storeInstance
 	userTokens    map[string]Token  // Map of username to token
 	userPasswords map[string]string // Map of username to password (from CSV)
 	newStore      store.NewStore
@@ -61,7 +61,7 @@ func newHandler(storageDir string, tokenTTL time.Duration,
 	return &handler{
 		storageDir:    storageDir,
 		tokenTTL:      tokenTTL,
-		stores:        make(map[Token]storeInstance),
+		stores:        make(map[Token]*storeInstance),
 		userTokens:    make(map[string]Token),
 		userPasswords: userPasswords,
 		newStore:      newStore,
@@ -104,7 +104,7 @@ func (h *handler) Login(
 	}
 
 	// Add token and initialize user directory in storage
-	s, err := h.addStore(msg.GetUsername(), h.tokenTTL)
+	s, err := h.addStore(msg.GetUsername())
 	if err != nil {
 		return nil, err
 	}
@@ -276,21 +276,21 @@ func (h *handler) getStore(token Token) (store.Store, error) {
 // initializes a new storage directory for user. On subsequent logins, it
 // overwrites the token with the new token gives access to the user's directory.
 // Returns StoreAlreadyExistsErr if one already exists for the token.
-func (h *handler) addStore(username string, tokenTTL time.Duration) (
-	storeInstance, error) {
+func (h *handler) addStore(username string) (*storeInstance, error) {
 	h.mux.Lock()
 	defer h.mux.Unlock()
 
 	// Generate a new nonce and token
-	n, err := nonce.NewNonce(uint(tokenTTL.Seconds()))
+	n, err := nonce.NewNonce(uint(h.tokenTTL.Seconds()))
 	if err != nil {
-		return storeInstance{}, err
+		// This error cannot currently happen
+		return nil, err
 	}
 	token := Token(n.Value)
 
 	// The token should always be unique; this error should never occur
 	if _, exists := h.stores[token]; exists {
-		return storeInstance{}, errors.WithStack(StoreAlreadyExistsErr)
+		return nil, errors.WithStack(StoreAlreadyExistsErr)
 	}
 
 	if oldToken, exists := h.userTokens[username]; exists {
@@ -298,14 +298,15 @@ func (h *handler) addStore(username string, tokenTTL time.Duration) (
 		jww.DEBUG.Printf(
 			"Deleting old store for %s after overwriting token.", username)
 		h.stores[token] = h.stores[oldToken]
+		h.stores[token].Value = nonce.Value(token)
 		delete(h.stores, oldToken)
 	} else {
 		// If no token exists, create a new store instance and put in the map
 		si, err := newStoreInstance(h.storageDir, username, n, h.newStore)
 		if err != nil {
-			return storeInstance{}, err
+			return nil, err
 		}
-		h.stores[token] = si
+		h.stores[token] = &si
 	}
 
 	// Update to the newest token

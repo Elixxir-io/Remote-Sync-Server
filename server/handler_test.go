@@ -27,7 +27,7 @@ func Test_newHandler(t *testing.T) {
 	expected := &handler{
 		storageDir:    "storageDir",
 		tokenTTL:      5 * time.Hour,
-		stores:        make(map[Token]storeInstance),
+		stores:        make(map[Token]*storeInstance),
 		userTokens:    make(map[string]Token),
 		userPasswords: map[string]string{"user": "pass"},
 	}
@@ -340,10 +340,96 @@ func Test_handler_verifyUser_InvalidPasswordError(t *testing.T) {
 	}
 }
 
+// Unit test of handler.getStore.
 func Test_handler_getStore(t *testing.T) {
+	h := &handler{
+		tokenTTL:   time.Hour,
+		stores:     make(map[Token]*storeInstance),
+		userTokens: make(map[string]Token),
+		newStore:   store.NewMemStore,
+	}
+	si1, err := h.addStore("waldo")
+	if err != nil {
+		t.Errorf("Failed to add store with the same username: %+v", err)
+	}
+
+	si2, err := h.getStore(Token(si1.Value))
+	if err != nil {
+		t.Errorf("Failed to get store for token %X: %+v", si1.Value, err)
+	}
+
+	if si1 != si2 {
+		t.Errorf("Got wrong storeInstance.\nexpected: %+v\nreceived: %+v",
+			si1, si2)
+	}
 }
 
+// Error path: Tests that handler.getStore returns InvalidTokenErr for a token
+// that is not found.
+func Test_handler_getStore_InvalidTokenError(t *testing.T) {
+	h := &handler{
+		stores: make(map[Token]*storeInstance),
+	}
+
+	_, err := h.getStore(Token{1, 2, 3})
+	if !errors.Is(err, InvalidTokenErr) {
+		t.Errorf("Unexpected error for invalid token."+
+			"\nexpected: %v\nreceived: %+v", InvalidTokenErr, err)
+	}
+}
+
+// Error path: Tests that handler.getStore returns InvalidTokenErr for an
+// expired token.
+func Test_handler_getStore_ExpiredTokenError(t *testing.T) {
+	h := &handler{
+		tokenTTL:   time.Second,
+		stores:     make(map[Token]*storeInstance),
+		userTokens: make(map[string]Token),
+		newStore:   store.NewMemStore,
+	}
+
+	si, err := h.addStore("waldo")
+	if err != nil {
+		t.Errorf("Failed to add store with the same username: %+v", err)
+	}
+
+	time.Sleep(time.Second)
+
+	_, err = h.getStore(Token(si.Value))
+	if !errors.Is(err, InvalidTokenErr) {
+		t.Errorf("Unexpected error for expired token."+
+			"\nexpected: %v\nreceived: %+v", InvalidTokenErr, err)
+	}
+}
+
+// Tests that when called twice on the same username, handler.addStore returns
+// the same storeInstance with a different token.
 func Test_handler_addStore(t *testing.T) {
+	h := &handler{
+		tokenTTL:   time.Hour,
+		stores:     make(map[Token]*storeInstance),
+		userTokens: make(map[string]Token),
+		newStore:   store.NewMemStore,
+	}
+
+	si1, err := h.addStore("waldo")
+	if err != nil {
+		t.Errorf("Failed to add store with the same username: %+v", err)
+	}
+	oldToken := si1.Value
+
+	si2, err := h.addStore("waldo")
+	if err != nil {
+		t.Errorf("Failed to add store with the same username: %+v", err)
+	}
+
+	if oldToken == si2.Value {
+		t.Errorf("Did not get new token.\nold: %X\nnew: %X", oldToken, si2.Value)
+	}
+
+	if si1 != si2 {
+		t.Errorf("New storeInstance created.\nold: %+v\nnew: %+v", si1, si2)
+	}
 }
 
 func newHandlerLogin(ttl time.Duration, username, password string,
