@@ -40,9 +40,10 @@ func TestNewFileStore(t *testing.T) {
 			expected, fs)
 	}
 
-	fi, err := os.Stat(fs.baseDir)
+	fi, err := os.Stat(fs.(*FileStore).baseDir)
 	if err != nil {
-		t.Errorf("Failed to stat base directory %s: %+v", fs.baseDir, err)
+		t.Errorf("Failed to stat base directory %s: %+v",
+			fs.(*FileStore).baseDir, err)
 	} else if !fi.IsDir() {
 		t.Errorf("Base directory path not directory.")
 	}
@@ -392,7 +393,7 @@ func newTestFileStore(baseDir, testDir string, t testing.TB) *FileStore {
 		t.Fatalf("Failed to create new FileStore: %+v", err)
 	}
 
-	return fs
+	return fs.(*FileStore)
 }
 
 // removeTestFile removes all passed in paths. Use in a defer function before
