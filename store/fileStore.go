@@ -5,7 +5,7 @@
 // LICENSE file.                                                              //
 ////////////////////////////////////////////////////////////////////////////////
 
-package file
+package store
 
 import (
 	"os"
@@ -20,34 +20,28 @@ import (
 	"gitlab.com/xx_network/primitives/utils"
 )
 
-var (
-	// NonLocalFileErr is returned when attempting to read or write to file or
-	// directory outside the base directory.
-	NonLocalFileErr = errors.New("file path not in local base directory")
-)
-
-// Store manages the storage in a base directory.
-type Store struct {
+// FileStore manages the file storage in a base directory.
+type FileStore struct {
 	baseDir       string
 	lastWritePath string
 
 	mux sync.Mutex
 }
 
-// NewStore creates a new Store at the specified base directory. This function
-// creates a new directory.
-func NewStore(baseDir string) (*Store, error) {
-	s := &Store{
+// NewFileStore creates a new FileStore at the specified base directory. This
+// function creates a new directory in the filesystem.
+func NewFileStore(baseDir string) (*FileStore, error) {
+	fs := &FileStore{
 		baseDir: baseDir,
 	}
 
-	err := os.MkdirAll(s.baseDir, 0700)
+	err := os.MkdirAll(fs.baseDir, 0700)
 	if err != nil {
 		return nil, errors.Wrapf(
-			err, "failed to make base directory %s", s.baseDir)
+			err, "failed to make base directory %s", fs.baseDir)
 	}
 
-	return s, nil
+	return fs, nil
 }
 
 // Read reads from the provided file path and returns the data in the file at
@@ -55,20 +49,20 @@ func NewStore(baseDir string) (*Store, error) {
 //
 // An error is returned if it fails to read the file. Returns [NonLocalFileErr]
 // if the file is outside the base path.
-func (s *Store) Read(path string) ([]byte, error) {
-	path, err := s.readyPath(path)
+func (fs *FileStore) Read(path string) ([]byte, error) {
+	path, err := fs.readyPath(path)
 	if err != nil {
 		return nil, err
 	}
 	return utils.ReadFile(path)
 }
 
-// Write writes the provided data to the file path
+// Write writes the provided data to the file path.
 //
 // An error is returned if the write fails. Returns [NonLocalFileErr] if the
 // file is outside the base path.
-func (s *Store) Write(path string, data []byte) error {
-	path, err := s.readyPath(path)
+func (fs *FileStore) Write(path string, data []byte) error {
+	path, err := fs.readyPath(path)
 	if err != nil {
 		return err
 	}
@@ -78,9 +72,9 @@ func (s *Store) Write(path string, data []byte) error {
 		return err
 	}
 
-	s.mux.Lock()
-	s.lastWritePath = path
-	s.mux.Unlock()
+	fs.mux.Lock()
+	fs.lastWritePath = path
+	fs.mux.Unlock()
 	return nil
 }
 
@@ -88,15 +82,15 @@ func (s *Store) Write(path string, data []byte) error {
 // file.
 //
 // Returns [NonLocalFileErr] if the file is outside the base path.
-func (s *Store) GetLastModified(path string) (time.Time, error) {
-	path, err := s.readyPath(path)
+func (fs *FileStore) GetLastModified(path string) (time.Time, error) {
+	path, err := fs.readyPath(path)
 	if err != nil {
 		return time.Time{}, err
 	}
-	return s.getLastModified(path)
+	return fs.getLastModified(path)
 }
 
-func (s *Store) getLastModified(path string) (time.Time, error) {
+func (fs *FileStore) getLastModified(path string) (time.Time, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
 		return time.Time{}, err
@@ -107,18 +101,18 @@ func (s *Store) getLastModified(path string) (time.Time, error) {
 
 // GetLastWrite returns the time of the most recent successful Write operation
 // that was performed.
-func (s *Store) GetLastWrite() (time.Time, error) {
-	s.mux.Lock()
-	defer s.mux.Unlock()
-	return s.getLastModified(s.lastWritePath)
+func (fs *FileStore) GetLastWrite() (time.Time, error) {
+	fs.mux.Lock()
+	defer fs.mux.Unlock()
+	return fs.getLastModified(fs.lastWritePath)
 }
 
 // ReadDir reads the named directory, returning all its directory entries
 // sorted by filename.
 //
 // Returns [NonLocalFileErr] if the file is outside the base path.
-func (s *Store) ReadDir(path string) ([]string, error) {
-	path, err := s.readyPath(path)
+func (fs *FileStore) ReadDir(path string) ([]string, error) {
+	path, err := fs.readyPath(path)
 	if err != nil {
 		return nil, err
 	}
@@ -140,9 +134,9 @@ func (s *Store) ReadDir(path string) ([]string, error) {
 
 // readyPath makes the path relative to the base directory and ensures it is
 // local. Returns NonLocalFileErr if the file is outside the base path.
-func (s *Store) readyPath(path string) (string, error) {
-	path = filepath.Join(s.baseDir, path)
-	if !s.isLocalFile(path) {
+func (fs *FileStore) readyPath(path string) (string, error) {
+	path = filepath.Join(fs.baseDir, path)
+	if !fs.isLocalFile(path) {
 		return "", NonLocalFileErr
 	}
 	return path, nil
@@ -150,11 +144,11 @@ func (s *Store) readyPath(path string) (string, error) {
 
 // isLocalFile determines if the file path is local to the base directory.
 // Returns NonLocalFileErr if the file is outside the base path.
-func (s *Store) isLocalFile(path string) bool {
-	rel, err := filepath.Rel(s.baseDir, path)
+func (fs *FileStore) isLocalFile(path string) bool {
+	rel, err := filepath.Rel(fs.baseDir, path)
 	if err != nil {
 		jww.WARN.Printf("Failed to get relative path of %s to base %s: %+v",
-			path, s.baseDir, err)
+			path, fs.baseDir, err)
 		return false
 	} else if strings.HasPrefix(rel, "..") {
 		return false
