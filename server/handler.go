@@ -25,7 +25,7 @@ import (
 var (
 	// InvalidTokenErr is returned when passed a token for a user that does
 	// not exist.
-	InvalidTokenErr = errors.New("Invalid token, log in required")
+	InvalidTokenErr = errors.New("Invalid token, login required")
 
 	// StoreAlreadyExistsErr is returned when passed a store with the given
 	// token already exists.
@@ -144,7 +144,7 @@ func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
 // the file is outside the base path, [NoStoreForTokenErr] for an invalid token,
 // and [ExpiredTokenErr] if the token has expired.
 func (h *handler) Write(msg *pb.RsWriteRequest) (*messages.Ack, error) {
-	jww.DEBUG.Printf("Received Write message: %s", msg)
+	jww.TRACE.Printf("Received Write message: %s", msg)
 
 	s, err := h.getStore(Token(msg.GetToken()))
 	if err != nil {
@@ -167,7 +167,7 @@ func (h *handler) Write(msg *pb.RsWriteRequest) (*messages.Ack, error) {
 // has expired.
 func (h *handler) GetLastModified(
 	msg *pb.RsReadRequest) (*pb.RsTimestampResponse, error) {
-	jww.DEBUG.Printf("Received GetLastModified message: %s", msg)
+	jww.TRACE.Printf("Received GetLastModified message: %s", msg)
 
 	s, err := h.getStore(Token(msg.GetToken()))
 	if err != nil {
@@ -189,7 +189,7 @@ func (h *handler) GetLastModified(
 // the token has expired.
 func (h *handler) GetLastWrite(
 	msg *pb.RsLastWriteRequest) (*pb.RsTimestampResponse, error) {
-	jww.DEBUG.Printf("Received GetLastWrite message: %s", msg)
+	jww.TRACE.Printf("Received GetLastWrite message: %s", msg)
 
 	s, err := h.getStore(Token(msg.GetToken()))
 	if err != nil {
@@ -211,7 +211,7 @@ func (h *handler) GetLastWrite(
 // [NoStoreForTokenErr] for an invalid token, and [ExpiredTokenErr] if the token
 // has expired.
 func (h *handler) ReadDir(msg *pb.RsReadRequest) (*pb.RsReadDirResponse, error) {
-	jww.DEBUG.Printf("Received ReadDir message: %s", msg)
+	jww.TRACE.Printf("Received ReadDir message: %s", msg)
 
 	s, err := h.getStore(Token(msg.GetToken()))
 	if err != nil {
