@@ -445,8 +445,8 @@ github.com/yuin/goldmark v1.1.25/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9de
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.1.32/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
-gitlab.com/elixxir/comms v0.0.4-0.20230714163129-779a464fd627 h1:QXIYri6nPAYr2MTRlF/ZUwVWpZvHfy11EkXI3MyAT+w=
-gitlab.com/elixxir/comms v0.0.4-0.20230714163129-779a464fd627/go.mod h1:z+qW0D9VpY5QKTd7wRlb5SK4kBNqLYsa4DXBcUXue9Q=
+gitlab.com/elixxir/comms v0.0.4-0.20230714203810-bd08061ec721 h1:gG1PI/W9tF9yB3rQwe+SmUPz2LzjpZw0ZQ1p6du2gQw=
+gitlab.com/elixxir/comms v0.0.4-0.20230714203810-bd08061ec721/go.mod h1:z+qW0D9VpY5QKTd7wRlb5SK4kBNqLYsa4DXBcUXue9Q=
 gitlab.com/elixxir/crypto v0.0.7-0.20230522162218-45433d877235 h1:0BySdXTzRWxzH8k5RiNNMmmn2lpuQWLVcDDA/7ehyqc=
 gitlab.com/elixxir/crypto v0.0.7-0.20230522162218-45433d877235/go.mod h1:IYInxKr5Q7EH3oNhg1QX1/sTTRNi7L0JkcyfdRegoio=
 gitlab.com/elixxir/primitives v0.0.3-0.20230214180039-9a25e2d3969c h1:muG8ff95woeVVwQoJHCEclxBFB22lc7EixPylEkYDRU=

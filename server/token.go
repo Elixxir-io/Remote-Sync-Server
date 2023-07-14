@@ -8,27 +8,16 @@
 package server
 
 import (
-	"encoding/base64"
-	"encoding/binary"
-	"time"
-
-	"gitlab.com/elixxir/crypto/hash"
+	"gitlab.com/xx_network/crypto/nonce"
 )
 
 // Token that identifies a user. It is unique and generated from a user's
 // username and password.
-type Token string
+type Token nonce.Value
 
-// GenerateToken generates a unique token from the username and password.
-func GenerateToken(username string, passwordHash []byte, genTime time.Time) Token {
-	h := hash.CMixHash.New()
-
-	h.Write([]byte(username))
-	h.Write(passwordHash)
-	b := make([]byte, 8)
-	binary.LittleEndian.PutUint64(b, uint64(genTime.UnixNano()))
-	h.Write(b)
-
-	tokenBytes := h.Sum(nil)
-	return Token(base64.StdEncoding.EncodeToString(tokenBytes))
+// UnmarshalToken unmarshalls the byte slice into a Token.
+func UnmarshalToken(b []byte) Token {
+	var t Token
+	copy(t[:], b)
+	return t
 }

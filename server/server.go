@@ -35,7 +35,11 @@ func NewServer(storageDir string, tokenTTL time.Duration, userRecords [][]string
 			"key pair from the cert and key: %+v", err)
 	}
 
-	h := newHandler(storageDir, tokenTTL, userRecords, store.NewFileStore)
+	h, err := newHandler(storageDir, tokenTTL, userRecords, store.NewFileStore)
+	if err != nil {
+		return nil, errors.Errorf("failed to initialize new handler: %+v", err)
+	}
+
 	s := &Server{
 		h:       h,
 		comms:   server.StartRemoteSync(id, localServer, h, certPem, keyPem),

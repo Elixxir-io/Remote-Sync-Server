@@ -8,28 +8,30 @@
 package server
 
 import (
-	"gitlab.com/xx_network/primitives/netTime"
 	"math/rand"
 	"reflect"
 	"testing"
 	"time"
 
 	"gitlab.com/elixxir/remoteSyncServer/store"
+	"gitlab.com/xx_network/crypto/nonce"
+	"gitlab.com/xx_network/primitives/netTime"
 )
 
 // Unit test of newStoreInstance.
 func Test_newStoreInstance(t *testing.T) {
-	expected := storeInstance{
-		username:   "username",
-		genTime:    time.Date(1955, 11, 5, 12, 30, 2, 16, time.UTC),
-		expiryTime: time.Time{},
-		ttl:        5 * time.Minute,
+	n, err := nonce.NewNonce(uint(5*time.Minute + 56*time.Nanosecond))
+	if err != nil {
+		t.Errorf("Failed to generate new nonce: %+v", err)
 	}
-	expected.expiryTime = expected.genTime.Add(expected.ttl)
+	expected := storeInstance{
+		username: "username",
+		Nonce:    n,
+		Store:    nil,
+	}
 	expected.Store, _ = store.NewMemStore("", "")
 
-	si, err := newStoreInstance(
-		"", expected.username, expected.genTime, expected.ttl, store.NewMemStore)
+	si, err := newStoreInstance("", expected.username, n, store.NewMemStore)
 	if err != nil {
 		t.Errorf("Failed to make new storeInstance: %+v", err)
 	}
@@ -57,7 +59,7 @@ func Test_storeInstance_isValid(t *testing.T) {
 	}
 
 	for expiryTime, expected := range times {
-		valid := storeInstance{expiryTime: expiryTime}.isValid()
+		valid := storeInstance{Nonce: nonce.Nonce{ExpiryTime: expiryTime}}.IsValid()
 		if valid != expected {
 			t.Errorf("Unexpected IsValid evaltuion for %s at time %s."+
 				"\nexpected: %t\nreceived: %t",

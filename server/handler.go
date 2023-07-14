@@ -19,7 +19,7 @@ import (
 	"gitlab.com/elixxir/crypto/hash"
 	"gitlab.com/elixxir/remoteSyncServer/store"
 	"gitlab.com/xx_network/comms/messages"
-	"gitlab.com/xx_network/primitives/netTime"
+	"gitlab.com/xx_network/crypto/nonce"
 )
 
 var (
@@ -31,17 +31,10 @@ var (
 	// token already exists.
 	StoreAlreadyExistsErr = errors.New("store with token already exists")
 
-	// ExpiredTokenErr is returned if the user's token has reached the TTL
-	// duration and has been deleted.
-	ExpiredTokenErr = errors.New("token expired; log in again")
-
-	// InvalidUsernameErr is returned when a username does not match a
-	// registered user.
-	InvalidUsernameErr = errors.New("username does not match known user")
-
-	// InvalidPasswordErr is returned when a password hashed with a salt does
-	// not match the expected password hash.
-	InvalidPasswordErr = errors.New("invalid password")
+	// InvalidCredentialsErr is returned when a username does not match a
+	// registered user or the password hashed with a salt does not match the
+	// expected password hash.
+	InvalidCredentialsErr = errors.New("invalid password or password")
 )
 
 // handler handles the server stores for each token/user.
@@ -59,29 +52,38 @@ type handler struct {
 //
 // Pass in Store.NewMemStore into newStore for testing.
 func newHandler(storageDir string, tokenTTL time.Duration,
-	userRecords [][]string, newStore store.NewStore) *handler {
+	userRecords [][]string, newStore store.NewStore) (*handler, error) {
+	userPasswords, err := userRecordsToMap(userRecords)
+	if err != nil {
+		return nil, err
+	}
+
 	return &handler{
 		storageDir:    storageDir,
 		tokenTTL:      tokenTTL,
 		stores:        make(map[Token]storeInstance),
 		userTokens:    make(map[string]Token),
-		userPasswords: userRecordsToMap(userRecords),
+		userPasswords: userPasswords,
 		newStore:      newStore,
-	}
+	}, nil
 }
 
 // userRecordsToMap converts the username/password records from a CSV to a map
 // of passwords keyed on each username. Note that this will overwrite any
 // passwords with duplicate usernames.
-func userRecordsToMap(records [][]string) map[string]string {
+func userRecordsToMap(records [][]string) (map[string]string, error) {
 	users := make(map[string]string, len(records))
-	for _, line := range records {
+	for i, line := range records {
+		if len(line) < 2 {
+			return nil, errors.Errorf("could not process record %d of %d",
+				i, len(records))
+		}
 		users[line[0]] = line[1]
 	}
 	jww.DEBUG.Printf(
 		"Imported %d users from %d records.", len(users), len(records))
 
-	return users
+	return users, nil
 }
 
 // Login is called when a new [mixmessages.RsAuthenticationRequest] is received.
@@ -99,22 +101,18 @@ func (h *handler) Login(
 		return nil, err
 	}
 
-	// Generate token
-	genTime := netTime.Now()
-	token := GenerateToken(msg.GetUsername(), msg.GetPasswordHash(), genTime)
-
-	// Add token to store
-	s, err := h.addStore(msg.GetUsername(), genTime, h.tokenTTL, token)
+	// Add token and initialize user directory in storage
+	s, err := h.addStore(msg.GetUsername(), h.tokenTTL)
 	if err != nil {
 		return nil, err
 	}
 
 	jww.INFO.Printf("Added store for user %s that expires at %s",
-		msg.GetUsername(), s.expiryTime)
+		msg.GetUsername(), s.ExpiryTime)
 
 	return &pb.RsAuthenticationResponse{
-		Token:     string(token),
-		ExpiresAt: s.expiryTime.UnixNano(),
+		Token:     s.Value[:],
+		ExpiresAt: s.ExpiryTime.UnixNano(),
 	}, nil
 }
 
@@ -123,12 +121,11 @@ func (h *handler) Login(
 //
 // An error is returned if it fails to read the file. Returns
 // [store.NonLocalFileErr] if the file is outside the base path,
-// [NoStoreForTokenErr] for an invalid token, and [ExpiredTokenErr] if the token
-// has expired.
+// [InvalidTokenErr] for an invalid token.
 func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
 	jww.TRACE.Printf("Received Read message: %s", msg)
 
-	s, err := h.getStore(Token(msg.GetToken()))
+	s, err := h.getStore(UnmarshalToken(msg.GetToken()))
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +134,6 @@ func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	jww.TRACE.Printf("Received Read message: %s", msg)
 
 	return &pb.RsReadResponse{Data: data}, nil
 }
@@ -145,12 +141,11 @@ func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
 // Write writes the provided data to the file path.
 //
 // An error is returned if the write fails. Returns [store.NonLocalFileErr] if
-// the file is outside the base path, [NoStoreForTokenErr] for an invalid token,
-// and [ExpiredTokenErr] if the token has expired.
+// the file is outside the base path, [InvalidTokenErr] for an invalid token.
 func (h *handler) Write(msg *pb.RsWriteRequest) (*messages.Ack, error) {
 	jww.TRACE.Printf("Received Write message: %s", msg)
 
-	s, err := h.getStore(Token(msg.GetToken()))
+	s, err := h.getStore(UnmarshalToken(msg.GetToken()))
 	if err != nil {
 		return nil, err
 	}
@@ -167,13 +162,12 @@ func (h *handler) Write(msg *pb.RsWriteRequest) (*messages.Ack, error) {
 // given file.
 //
 // Returns [store.NonLocalFileErr] if the file is outside the base path,
-// [NoStoreForTokenErr] for an invalid token, and [ExpiredTokenErr] if the token
-// has expired.
+// [InvalidTokenErr] for an invalid token.
 func (h *handler) GetLastModified(
 	msg *pb.RsReadRequest) (*pb.RsTimestampResponse, error) {
 	jww.TRACE.Printf("Received GetLastModified message: %s", msg)
 
-	s, err := h.getStore(Token(msg.GetToken()))
+	s, err := h.getStore(UnmarshalToken(msg.GetToken()))
 	if err != nil {
 		return nil, err
 	}
@@ -189,13 +183,12 @@ func (h *handler) GetLastModified(
 // GetLastWrite returns the time of the most recent successful Write
 // operation that was performed.
 //
-// Returns [NoStoreForTokenErr] for an invalid token, and [ExpiredTokenErr] if
-// the token has expired.
+// Returns [InvalidTokenErr] for an invalid token.
 func (h *handler) GetLastWrite(
 	msg *pb.RsLastWriteRequest) (*pb.RsTimestampResponse, error) {
 	jww.TRACE.Printf("Received GetLastWrite message: %s", msg)
 
-	s, err := h.getStore(Token(msg.GetToken()))
+	s, err := h.getStore(UnmarshalToken(msg.GetToken()))
 	if err != nil {
 		return nil, err
 	}
@@ -212,17 +205,17 @@ func (h *handler) GetLastWrite(
 // sorted by filename.
 //
 // Returns [store.NonLocalFileErr] if the file is outside the base path,
-// [NoStoreForTokenErr] for an invalid token, and [ExpiredTokenErr] if the token
-// has expired.
-func (h *handler) ReadDir(msg *pb.RsReadRequest) (*pb.RsReadDirResponse, error) {
+// [InvalidTokenErr] for an invalid token.
+func (h *handler) ReadDir(
+	msg *pb.RsReadRequest) (*pb.RsReadDirResponse, error) {
 	jww.TRACE.Printf("Received ReadDir message: %s", msg)
 
-	s, err := h.getStore(Token(msg.GetToken()))
+	s, err := h.getStore(UnmarshalToken(msg.GetToken()))
 	if err != nil {
 		return nil, err
 	}
 
-	directories, err := s.ReadDir(msg.GetToken())
+	directories, err := s.ReadDir(msg.GetPath())
 	if err != nil {
 		return nil, err
 	}
@@ -237,54 +230,61 @@ func (h *handler) verifyUser(username string, passwordHash, salt []byte) error {
 
 	clearTextPassword, exists := h.userPasswords[username]
 	if !exists {
-		return InvalidUsernameErr
+		return InvalidCredentialsErr
 	}
 
 	hh := hash.CMixHash.New()
 	hh.Write([]byte(clearTextPassword))
 	hh.Write(salt)
 	if !bytes.Equal(hh.Sum(nil), passwordHash) {
-		return InvalidPasswordErr
+		return InvalidCredentialsErr
 	}
 
 	return nil
 }
 
-// getStore returns the store for the given token. Returns [NoStoreForTokenErr]
-// if it does not exist or [ExpiredTokenErr] if the token has expired.
-func (h *handler) getStore(t Token) (store.Store, error) {
+// getStore returns the store for the given token. Returns [InvalidTokenErr] for
+// an invalid token.
+func (h *handler) getStore(token Token) (store.Store, error) {
 	h.mux.Lock()
 	defer h.mux.Unlock()
 
-	s, exists := h.stores[t]
+	s, exists := h.stores[token]
 	if !exists {
 		return nil, InvalidTokenErr
 	}
 
 	// If the store is no longer valid, then delete it and its token from their
 	// respective maps
-	if !s.isValid() {
-		delete(h.stores, t)
+	if !s.IsValid() {
+		delete(h.stores, token)
 		delete(h.userTokens, s.username)
-		return nil, ExpiredTokenErr
+		return nil, InvalidTokenErr
 	}
 
 	return s, nil
 }
 
-// addStore adds a new store for the given token. Returns StoreAlreadyExistsErr
-// if one already exists for the token.
-func (h *handler) addStore(username string, genTime time.Time,
-	tokenTTL time.Duration, token Token) (storeInstance, error) {
+// addStore generates a new Token and expiration time. On first login, it
+// initializes a new storage directory for user. On subsequent logins, it
+// overwrites the token with the new token gives access to the user's directory.
+// Returns StoreAlreadyExistsErr if one already exists for the token.
+func (h *handler) addStore(username string, tokenTTL time.Duration) (
+	storeInstance, error) {
 	h.mux.Lock()
 	defer h.mux.Unlock()
+
+	n, err := nonce.NewNonce(uint(tokenTTL.Seconds()))
+	if err != nil {
+		return storeInstance{}, err
+	}
+	token := Token(n.Value)
 
 	if _, exists := h.stores[token]; !exists {
 		return storeInstance{}, StoreAlreadyExistsErr
 	}
 
-	s, err :=
-		newStoreInstance(h.storageDir, username, genTime, tokenTTL, h.newStore)
+	s, err := newStoreInstance(h.storageDir, username, n, h.newStore)
 	if err != nil {
 		return storeInstance{}, err
 	}
