@@ -8,7 +8,6 @@
 package cmd
 
 import (
-	"crypto/tls"
 	"fmt"
 	"io"
 	"log"
@@ -21,7 +20,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
-	"gitlab.com/elixxir/comms/remoteSync/server"
+	"gitlab.com/elixxir/remoteSyncServer/server"
 	"gitlab.com/xx_network/primitives/id"
 	"gitlab.com/xx_network/primitives/utils"
 )
@@ -60,18 +59,16 @@ var rootCmd = &cobra.Command{
 			jww.FATAL.Panicf("Failed to read key from path %s: %+v",
 				signedKeyPath, err)
 		}
-		keyPair, err := tls.X509KeyPair(signedCert, signedKey)
-		if err != nil {
-			jww.FATAL.Panicf("Failed to generate a public/private key pair "+
-				"from the cert and key: %+v", err)
-		}
 
 		// Start comms
-		comms := server.StartRemoteSync(
-			&id.DummyUser, localAddress, nil, signedCert, signedKey)
-		err = comms.ServeHttps(keyPair)
+		s, err := server.NewServer(
+			&id.DummyUser, localAddress, signedCert, signedKey)
 		if err != nil {
-			jww.FATAL.Panicf("%+v", err)
+			jww.FATAL.Panicf("Failed to create new server: %+v", err)
+		}
+		err = s.Start()
+		if err != nil {
+			jww.FATAL.Panicf("Failed to start server: %+v", err)
 		}
 	},
 }
@@ -156,11 +153,11 @@ func init() {
 	bindPFlag(rootCmd.PersistentFlags(), logLevelFlag, rootCmd.Use)
 
 	rootCmd.PersistentFlags().String(signedCertPathTag, "",
-		"Path to the signed certificate file.")
+		"Path to the PEM encoded certificate file.")
 	bindPFlag(rootCmd.PersistentFlags(), signedCertPathTag, rootCmd.Use)
 
 	rootCmd.PersistentFlags().String(signedKeyPathTag, "",
-		"Path to the signed key file.")
+		"Path to the PEM encoded key file.")
 	bindPFlag(rootCmd.PersistentFlags(), signedKeyPathTag, rootCmd.Use)
 
 	rootCmd.PersistentFlags().String(portTag, "",
