@@ -18,6 +18,7 @@ import (
 
 	"github.com/spf13/cobra"
 	jww "github.com/spf13/jwalterweatherman"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	"gitlab.com/elixxir/remoteSyncServer/server"
@@ -168,4 +169,21 @@ func initLog(logPath string, threshold uint) {
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFilePath, "config", "c", "",
 		"File path to Custom configuration.")
+
+	rootCmd.PersistentFlags().StringP(logPathFlag, "l", "",
+		"File path to save log file to.")
+	bindPFlag(rootCmd.PersistentFlags(), logPathFlag, rootCmd.Use)
+
+	rootCmd.PersistentFlags().IntP(logLevelFlag, "v", 0,
+		"Verbosity level for log printing (2+ = Trace, 1 = Debug, 0 = Info).")
+	bindPFlag(rootCmd.PersistentFlags(), logLevelFlag, rootCmd.Use)
+}
+
+// bindPFlag binds the key to a pflag.Flag. Panics on error.
+func bindPFlag(flagSet *pflag.FlagSet, key, use string) {
+	err := viper.BindPFlag(key, flagSet.Lookup(key))
+	if err != nil {
+		jww.FATAL.Panicf(
+			"Failed to bind key %q to a pflag on %s: %+v", key, use, err)
+	}
 }
