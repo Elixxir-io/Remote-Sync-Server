@@ -8,17 +8,37 @@
 package cmd
 
 import (
+	"encoding/csv"
 	"fmt"
-	"github.com/spf13/pflag"
 	"io"
 	"log"
+	"net"
 	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	jww "github.com/spf13/jwalterweatherman"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
+	"gitlab.com/elixxir/remoteSyncServer/server"
+	"gitlab.com/xx_network/primitives/id"
 	"gitlab.com/xx_network/primitives/utils"
+)
+
+var configFilePath string
+
+const (
+	logPathFlag  = "logPath"
+	logLevelFlag = "logLevel"
+
+	signedCertPathTag = "signedCertPath"
+	signedKeyPathTag  = "signedKeyPath"
+	portTag           = "port"
+
+	tokenTtlTag        = "tokenTTL"
+	credentialsPathTag = "credentialsCsvPath"
+	storageDirTag      = "storageDir"
 )
 
 // Execute initialises all config files, flags, and logging and then starts the
@@ -38,16 +58,57 @@ var rootCmd = &cobra.Command{
 		initLog(viper.GetString(logPathFlag), viper.GetUint(logLevelFlag))
 		jww.INFO.Printf(Version())
 
-		/* Do server stuff here. */
+		// Obtain parameters
+		signedCertPath := viper.GetString(signedCertPathTag)
+		signedKeyPath := viper.GetString(signedKeyPathTag)
+		storageDir := viper.GetString(storageDirTag)
+		tokenTTL := viper.GetDuration(tokenTtlTag)
+		credentialsCsvPath := viper.GetString(credentialsPathTag)
+		localAddress :=
+			net.JoinHostPort("0.0.0.0", strconv.Itoa(viper.GetInt(portTag)))
+
+		// Obtain certs
+		signedCert, err := utils.ReadFile(signedCertPath)
+		if err != nil {
+			jww.FATAL.Panicf("Failed to read certificate from path %s: %+v",
+				signedCertPath, err)
+		}
+		signedKey, err := utils.ReadFile(signedKeyPath)
+		if err != nil {
+			jww.FATAL.Panicf("Failed to read key from path %s: %+v",
+				signedKeyPath, err)
+		}
+
+		// Obtain credentials from CSV
+		csvPath, err := utils.ExpandPath(credentialsCsvPath)
+		if err != nil {
+			jww.FATAL.Panicf("Unable to expand path %s: %+v",
+				credentialsCsvPath, err)
+		}
+		f, err := os.Open(csvPath)
+		if err != nil {
+			jww.FATAL.Panicf("Unable to read input file %s: %+v",
+				csvPath, err)
+		}
+		records, err := csv.NewReader(f).ReadAll()
+		if err != nil {
+			jww.FATAL.Panicf("Unable to parse file as CSV for %s: %+v",
+				credentialsCsvPath, err)
+		}
+		_ = f.Close()
+
+		// Start comms
+		s, err := server.NewServer(storageDir, tokenTTL, records,
+			&id.DummyUser, localAddress, signedCert, signedKey)
+		if err != nil {
+			jww.FATAL.Panicf("Failed to create new server: %+v", err)
+		}
+		err = s.Start()
+		if err != nil {
+			jww.FATAL.Panicf("Failed to start server: %+v", err)
+		}
 	},
 }
-
-var configFilePath string
-
-const (
-	logPathFlag  = "logPath"
-	logLevelFlag = "logLevel"
-)
 
 // initConfig reads in config file from the file path.
 func initConfig(filePath string) {
