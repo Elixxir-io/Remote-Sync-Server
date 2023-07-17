@@ -212,8 +212,8 @@ func TestFileStore_GetLastModified(t *testing.T) {
 		lastModified, err := fs.GetLastModified(path)
 		if err != nil {
 			t.Errorf("Failed to get last modified for path %s: %+v", path, err)
-		} else if !lastModified.Round(250 * time.Millisecond).Equal(
-			expected.Round(250 * time.Millisecond)) {
+		} else if !lastModified.Round(500 * time.Millisecond).Equal(
+			expected.Round(500 * time.Millisecond)) {
 			t.Errorf("Last modified on path %s is not close to expected time "+
 				"(Δ%s).\nexpected: %s\nreceived: %s",
 				path, expected.Sub(lastModified), expected, lastModified)

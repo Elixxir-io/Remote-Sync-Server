@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"math/rand"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -191,6 +192,100 @@ func Test_handler_Write_Read(t *testing.T) {
 	}
 }
 
+func Test_handler_Read(t *testing.T) {
+	h, token := newHandlerLogin(
+		time.Hour, "waldo", "hunter2", rand.New(rand.NewSource(4596)), t)
+
+	filePath := "dir1/dir2/fileA.txt"
+	contents := []byte("Lorem ipsum and such as it goes.")
+	ack, err := h.Write(&pb.RsWriteRequest{
+		Path:  filePath,
+		Data:  contents,
+		Token: token.Marshal(),
+	})
+	if err != nil {
+		t.Errorf("Failed to write: %+v", err)
+	} else if ack == nil {
+		t.Errorf("Received no ack: %+v", ack)
+	}
+
+	response, err := h.Read(&pb.RsReadRequest{
+		Path:  filePath,
+		Token: token.Marshal(),
+	})
+	if err != nil {
+		t.Errorf("Failed to read: %+v", err)
+	}
+
+	if !bytes.Equal(contents, response.GetData()) {
+		t.Errorf("Unexpected contents.\nexpected: %q\nreceived: %q",
+			contents, response.GetData())
+	}
+}
+
+// Error path: Tests that handler.Read returns InvalidTokenErr for a token that
+// is not found.
+func Test_handler_read_InvalidTokenError(t *testing.T) {
+	prng := rand.New(rand.NewSource(354))
+	h, token := newHandlerLogin(time.Hour, "waldo", "hunter2", prng, t)
+
+	prng.Read(token[:])
+	_, err := h.Read(&pb.RsReadRequest{Token: token.Marshal()})
+	if !errors.Is(err, InvalidTokenErr) {
+		t.Errorf("Unexpected error for invalid token."+
+			"\nexpected: %v\nreceived: %+v", InvalidTokenErr, err)
+	}
+}
+
+// Error path: Tests that handler.Read returns InvalidTokenErr for a token that
+// is not found.
+func Test_handler_read_InvalidPathError(t *testing.T) {
+	prng := rand.New(rand.NewSource(354))
+	h, token := newHandlerLogin(time.Hour, "waldo", "hunter2", prng, t)
+
+	_, err := h.Read(&pb.RsReadRequest{
+		Path:  "someFile",
+		Token: token.Marshal()},
+	)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("Unexpected error for invalid path."+
+			"\nexpected: %v\nreceived: %+v", os.ErrNotExist, err)
+	}
+}
+
+// Error path: Tests that handler.Write returns InvalidTokenErr for a token that
+// is not found.
+func Test_handler_write_InvalidTokenError(t *testing.T) {
+	prng := rand.New(rand.NewSource(5658))
+	h, token := newHandlerLogin(time.Hour, "waldo", "hunter2", prng, t)
+
+	prng.Read(token[:])
+	_, err := h.Write(&pb.RsWriteRequest{Token: token.Marshal()})
+	if !errors.Is(err, InvalidTokenErr) {
+		t.Errorf("Unexpected error for invalid token."+
+			"\nexpected: %v\nreceived: %+v", InvalidTokenErr, err)
+	}
+}
+
+// Error path: Tests that handler.Write returns InvalidTokenErr for a file path
+// that is not local to the user's directory.
+func Test_handler_write_NonLocalFileError(t *testing.T) {
+	prng := rand.New(rand.NewSource(5658))
+	h, token, closeFn := newHandlerStoreLogin(
+		time.Hour, "waldo", "hunter2", prng, store.NewFileStore, t)
+	defer closeFn()
+
+	_, err := h.Write(&pb.RsWriteRequest{
+		Path:  "domeDir/../../../user/file",
+		Data:  []byte("my secret data"),
+		Token: token.Marshal(),
+	})
+	if !errors.Is(err, store.NonLocalFileErr) {
+		t.Errorf("Unexpected error for a non-local file path."+
+			"\nexpected: %v\nreceived: %+v", store.NonLocalFileErr, err)
+	}
+}
+
 func Test_handler_GetLastModified(t *testing.T) {
 	h, token := newHandlerLogin(
 		time.Hour, "waldo", "hunter2", rand.New(rand.NewSource(4596)), t)
@@ -221,6 +316,20 @@ func Test_handler_GetLastModified(t *testing.T) {
 	}
 }
 
+// Error path: Tests that handler.GetLastModified returns InvalidTokenErr for a
+// token that is not found.
+func Test_handler_GetLastModified_InvalidTokenError(t *testing.T) {
+	prng := rand.New(rand.NewSource(576945))
+	h, token := newHandlerLogin(time.Hour, "waldo", "hunter2", prng, t)
+
+	prng.Read(token[:])
+	_, err := h.GetLastModified(&pb.RsReadRequest{Token: token.Marshal()})
+	if !errors.Is(err, InvalidTokenErr) {
+		t.Errorf("Unexpected error for invalid token."+
+			"\nexpected: %v\nreceived: %+v", InvalidTokenErr, err)
+	}
+}
+
 func Test_handler_GetLastWrite(t *testing.T) {
 	h, token := newHandlerLogin(
 		time.Hour, "waldo", "hunter2", rand.New(rand.NewSource(4596)), t)
@@ -244,6 +353,33 @@ func Test_handler_GetLastWrite(t *testing.T) {
 	if !ts.Round(time.Second).Equal(now.Round(time.Second)) || now.Before(ts) {
 		t.Errorf("Modification time not near or before now."+
 			"\nnow:      %s\nreceived: %s", now, ts)
+	}
+}
+
+// Error path: Tests that handler.GetLastWrite returns InvalidTokenErr for a
+// token that is not found.
+func Test_handler_GetLastWrite_InvalidTokenError(t *testing.T) {
+	prng := rand.New(rand.NewSource(34))
+	h, token := newHandlerLogin(time.Hour, "waldo", "hunter2", prng, t)
+
+	prng.Read(token[:])
+	_, err := h.GetLastWrite(&pb.RsLastWriteRequest{Token: token.Marshal()})
+	if !errors.Is(err, InvalidTokenErr) {
+		t.Errorf("Unexpected error for invalid token."+
+			"\nexpected: %v\nreceived: %+v", InvalidTokenErr, err)
+	}
+}
+
+// Error path: Tests that handler.GetLastWrite returns os.ErrNotExist when no
+// write has been performed.
+func Test_handler_GetLastWrite_NoWriteError(t *testing.T) {
+	prng := rand.New(rand.NewSource(34))
+	h, token := newHandlerLogin(time.Hour, "waldo", "hunter2", prng, t)
+
+	_, err := h.GetLastWrite(&pb.RsLastWriteRequest{Token: token.Marshal()})
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("Unexpected error for invalid token."+
+			"\nexpected: %v\nreceived: %+v", os.ErrNotExist, err)
 	}
 }
 
@@ -273,7 +409,20 @@ func Test_handler_ReadDir(t *testing.T) {
 		t.Errorf("Unexpected directories.\nexpected: %s\nreceived: %s",
 			expected, msg.GetData())
 	}
+}
 
+// Error path: Tests that handler.ReadDir returns InvalidTokenErr for a token
+// that is not found.
+func Test_handler_ReadDir_InvalidTokenError(t *testing.T) {
+	prng := rand.New(rand.NewSource(9841))
+	h, token := newHandlerLogin(time.Hour, "waldo", "hunter2", prng, t)
+
+	prng.Read(token[:])
+	_, err := h.ReadDir(&pb.RsReadRequest{Token: token.Marshal()})
+	if !errors.Is(err, InvalidTokenErr) {
+		t.Errorf("Unexpected error for invalid token."+
+			"\nexpected: %v\nreceived: %+v", InvalidTokenErr, err)
+	}
 }
 
 // Tests handler.verifyUser with valid user.
@@ -434,13 +583,29 @@ func Test_handler_addStore(t *testing.T) {
 
 func newHandlerLogin(ttl time.Duration, username, password string,
 	prng *rand.Rand, t testing.TB) (*handler, Token) {
+	h, token, _ := newHandlerStoreLogin(
+		ttl, username, password, prng, store.NewMemStore, t)
+	return h, token
+}
+
+func newHandlerStoreLogin(ttl time.Duration, username, password string,
+	prng *rand.Rand, newStore store.NewStore, t testing.TB) (
+	*handler, Token, func()) {
 	salt := make([]byte, 32)
 	prng.Read(salt)
 	passwordHash := hashPassword(password, salt)
 
+	const testDir = "tmp"
+	closeFn := func() {
+		if err := os.RemoveAll(testDir); err != nil {
+			t.Errorf("Failed to remove test directory %q: %+v", testDir, err)
+		}
+	}
+
 	h, err := newHandler(
-		"tmp", ttl, [][]string{{username, password}}, store.NewMemStore)
+		testDir, ttl, [][]string{{username, password}}, newStore)
 	if err != nil {
+		closeFn()
 		t.Fatalf("Failed to make new handler: %+v", err)
 	}
 	msg, err := h.Login(&pb.RsAuthenticationRequest{
@@ -449,7 +614,9 @@ func newHandlerLogin(ttl time.Duration, username, password string,
 		Salt:         salt,
 	})
 	if err != nil {
+		closeFn()
 		t.Fatalf("Failed to login: %+v", err)
 	}
-	return h, UnmarshalToken(msg.GetToken())
+
+	return h, UnmarshalToken(msg.GetToken()), closeFn
 }
