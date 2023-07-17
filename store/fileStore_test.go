@@ -338,7 +338,9 @@ func TestFileStore_readyPath(t *testing.T) {
 		err            error
 	}{
 		{"dir/file", filepath.Join(fs.baseDir, "dir/file"), nil},
+		{"/root/.ssh/authorized_keys", filepath.Join(fs.baseDir, "/root/.ssh/authorized_keys"), nil},
 		{"../dir/file", "", NonLocalFileErr},
+		{"..", "", NonLocalFileErr},
 	}
 
 	for i, tt := range tests {
@@ -372,6 +374,8 @@ func TestFileStore_isLocalFile(t *testing.T) {
 		"./file":                                              false,
 		"~/file":                                              false,
 		`C:\`:                                                 false,
+		"..":                                                  false,
+		"../":                                                 false,
 	}
 
 	for path, expected := range testPaths {

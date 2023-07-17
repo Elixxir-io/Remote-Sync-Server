@@ -163,7 +163,7 @@ func isLocalFile(baseDir, path string) bool {
 		jww.WARN.Printf("Failed to get relative path of %s to base %s: %+v",
 			path, baseDir, err)
 		return false
-	} else if strings.HasPrefix(rel, "..") {
+	} else if strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return false
 	}
 

@@ -16,7 +16,7 @@ signedKeyPath:  "~/syncServer.key"
 
 # Duration that logged-in sessions are valid.
 tokenTTL: 24h
-# Path to CSV containing list of authorized users in "username>,<password>" format.
+# Path to CSV containing list of authorized users in "<username>,<password>" format.
 credentialsCsvPath: "~/credentials.csv"
 # Base directory for synced files.
 storageDir: "~/syncServer"
