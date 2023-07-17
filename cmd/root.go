@@ -149,19 +149,19 @@ func initLog(logPath string, threshold uint) {
 	}
 
 	if threshold > 1 {
-		jww.INFO.Printf("log level set to: TRACE")
 		jww.SetStdoutThreshold(jww.LevelTrace)
 		jww.SetLogThreshold(jww.LevelTrace)
 		jww.SetFlags(log.LstdFlags | log.Lmicroseconds)
+		jww.INFO.Printf("Log level set to TRACE and output to %s", logPath)
 	} else if threshold == 1 {
-		jww.INFO.Printf("log level set to: DEBUG")
 		jww.SetStdoutThreshold(jww.LevelDebug)
 		jww.SetLogThreshold(jww.LevelDebug)
 		jww.SetFlags(log.LstdFlags | log.Lmicroseconds)
+		jww.INFO.Printf("Log level set to DEBUG and output to %s", logPath)
 	} else {
-		jww.INFO.Printf("log level set to: INFO")
 		jww.SetStdoutThreshold(jww.LevelInfo)
 		jww.SetLogThreshold(jww.LevelInfo)
+		jww.INFO.Printf("Log level set to INFO and output to %s", logPath)
 	}
 }
 
