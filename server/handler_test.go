@@ -310,9 +310,10 @@ func Test_handler_GetLastModified(t *testing.T) {
 
 	ts := time.Unix(0, msg.GetTimestamp())
 	now := netTime.Now()
-	if !ts.Round(time.Second).Equal(now.Round(time.Second)) || now.Before(ts) {
-		t.Errorf("Modification time not near or before now."+
-			"\nnow:      %s\nreceived: %s", now, ts)
+
+	if delta := now.Sub(ts); delta > 10*time.Millisecond || now.Before(ts) {
+		t.Errorf("Modification time not near or before now (Δ%s)."+
+			"\nnow:      %s\nreceived: %s", delta, now, ts)
 	}
 }
 

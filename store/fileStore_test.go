@@ -212,11 +212,10 @@ func TestFileStore_GetLastModified(t *testing.T) {
 		lastModified, err := fs.GetLastModified(path)
 		if err != nil {
 			t.Errorf("Failed to get last modified for path %s: %+v", path, err)
-		} else if !lastModified.Round(500 * time.Millisecond).Equal(
-			expected.Round(500 * time.Millisecond)) {
+		} else if delta := expected.Sub(lastModified); delta > 10*time.Millisecond {
 			t.Errorf("Last modified on path %s is not close to expected time "+
 				"(Δ%s).\nexpected: %s\nreceived: %s",
-				path, expected.Sub(lastModified), expected, lastModified)
+				path, delta, expected, lastModified)
 		}
 	}
 }
@@ -254,21 +253,19 @@ func TestFileStore_GetLastWrite(t *testing.T) {
 	defer removeTestFile(t, testDir)
 
 	for i := 0; i < 20; i++ {
-		timeNow := netTime.Now()
+		now := netTime.Now()
 		err := fs.Write(randString(1+prng.Intn(6), prng)+".txt",
 			[]byte(randString(1+prng.Intn(12), prng)))
 		if err != nil {
 			t.Errorf("Failed to write data (%d): %+v", i, err)
 		}
 
-		const round = 250 * time.Millisecond
 		lastModified, err := fs.GetLastWrite()
 		if err != nil {
 			t.Errorf("Failed to get last modified (%d): %+v", i, err)
-		} else if !lastModified.Round(round).Equal(timeNow.Round(round)) {
+		} else if delta := now.Sub(lastModified); delta > 10*time.Millisecond {
 			t.Errorf("Last modified is not close to expected time (Δ%s) (%d)."+
-				"\nexpected: %s\nreceived: %s",
-				timeNow.Sub(lastModified), i, timeNow, lastModified)
+				"\nexpected: %s\nreceived: %s", delta, i, now, lastModified)
 		}
 	}
 }
