@@ -16,11 +16,9 @@ build:
 
 update_release:
 	GOFLAGS="" go get gitlab.com/xx_network/primitives@release
-	GOFLAGS="" go get -d gitlab.com/elixxir/client/v4@release
 
 update_master:
 	GOFLAGS="" go get gitlab.com/xx_network/primitives@master
-	GOFLAGS="" go get -d gitlab.com/elixxir/client/v4@master
 
 binary:
 	go build -ldflags '-w -s' -trimpath -o remoteSyncServer main.go

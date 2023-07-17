@@ -55,12 +55,12 @@ build:
     - go mod vendor -v
     - make version
     - mkdir -p release
-    - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags '-w -s' -o release/client.linux64 main.go
-    - GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags '-w -s' -o release/client.darwin64 main.go
+    - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags '-w -s' -o release/remoteSyncServer .linux64 main.go
+    - GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags '-w -s' -o release/remoteSyncServer .darwin64 main.go
     - /upload-artifacts.sh release/
   artifacts:
     paths:
-     - release/
+      - release/
 
 # This pipeline job will attempt to have pkg.go.dev update docs for client/xxdk.
 #
