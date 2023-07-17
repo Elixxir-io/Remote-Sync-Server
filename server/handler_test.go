@@ -110,14 +110,12 @@ func Test_handler_Login(t *testing.T) {
 	salt := make([]byte, 32)
 	prng.Read(salt)
 
-	passwordHash := hashPassword(password, salt)
-
 	h, _ := newHandler(
 		"tmp", time.Hour, [][]string{{username, password}}, store.NewMemStore)
 
 	msg, err := h.Login(&pb.RsAuthenticationRequest{
 		Username:     username,
-		PasswordHash: passwordHash,
+		PasswordHash: hashPassword(password, salt),
 		Salt:         salt,
 	})
 	if err != nil {
@@ -158,6 +156,29 @@ func Test_handler_Login_InvalidUsernameError(t *testing.T) {
 	if !errors.Is(err, InvalidCredentialsErr) {
 		t.Errorf("Unexpected error for invalid username."+
 			"\nexpected: %v\nreceived: %+v", InvalidCredentialsErr, err)
+	}
+}
+
+// Error path: Tests that handler.Login returns store.NonLocalFileErr for a
+// username that contains a non-local path.
+func Test_handler_Login_NonLocalPathError(t *testing.T) {
+	prng := rand.New(rand.NewSource(44477))
+	username := "../../waldo"
+	password := "hunter2"
+	salt := make([]byte, 32)
+	prng.Read(salt)
+
+	h, _ := newHandler(
+		"tmp", time.Hour, [][]string{{username, password}}, store.NewFileStore)
+
+	_, err := h.Login(&pb.RsAuthenticationRequest{
+		Username:     username,
+		PasswordHash: hashPassword(password, salt),
+		Salt:         salt,
+	})
+	if !errors.Is(err, store.NonLocalFileErr) {
+		t.Errorf("Unexpected error for a non-local base path."+
+			"\nexpected: %v\nreceived: %+v", store.NonLocalFileErr, err)
 	}
 }
 
@@ -237,8 +258,8 @@ func Test_handler_read_InvalidTokenError(t *testing.T) {
 	}
 }
 
-// Error path: Tests that handler.Read returns InvalidTokenErr for a token that
-// is not found.
+// Error path: Tests that handler.Read returns os.ErrNotExist when trying to
+// read from a file that does not exist.
 func Test_handler_read_InvalidPathError(t *testing.T) {
 	prng := rand.New(rand.NewSource(354))
 	h, token := newHandlerLogin(time.Hour, "waldo", "hunter2", prng, t)
@@ -267,8 +288,8 @@ func Test_handler_write_InvalidTokenError(t *testing.T) {
 	}
 }
 
-// Error path: Tests that handler.Write returns InvalidTokenErr for a file path
-// that is not local to the user's directory.
+// Error path: Tests that handler.Write returns store.NonLocalFileErr for a file
+// path that is not local to the user's directory.
 func Test_handler_write_NonLocalFileError(t *testing.T) {
 	prng := rand.New(rand.NewSource(5658))
 	h, token, closeFn := newHandlerStoreLogin(
@@ -328,6 +349,22 @@ func Test_handler_GetLastModified_InvalidTokenError(t *testing.T) {
 	if !errors.Is(err, InvalidTokenErr) {
 		t.Errorf("Unexpected error for invalid token."+
 			"\nexpected: %v\nreceived: %+v", InvalidTokenErr, err)
+	}
+}
+
+// Error path: Tests that handler.GetLastModified returns os.ErrNotExist when
+// trying to read from a file that does not exist.
+func Test_handler_GetLastModified_InvalidPathError(t *testing.T) {
+	prng := rand.New(rand.NewSource(354))
+	h, token := newHandlerLogin(time.Hour, "waldo", "hunter2", prng, t)
+
+	_, err := h.GetLastModified(&pb.RsReadRequest{
+		Path:  "someFile",
+		Token: token.Marshal()},
+	)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("Unexpected error for invalid path."+
+			"\nexpected: %v\nreceived: %+v", os.ErrNotExist, err)
 	}
 }
 
@@ -409,6 +446,24 @@ func Test_handler_ReadDir(t *testing.T) {
 	if !reflect.DeepEqual(msg.GetData(), expected) {
 		t.Errorf("Unexpected directories.\nexpected: %s\nreceived: %s",
 			expected, msg.GetData())
+	}
+}
+
+// Error path: Tests that handler.ReadDir returns store.NonLocalFileErr for a
+// file path that is not local to the user's directory.
+func Test_handler_ReadDir_NonLocalFileError(t *testing.T) {
+	prng := rand.New(rand.NewSource(5658))
+	h, token, closeFn := newHandlerStoreLogin(
+		time.Hour, "waldo", "hunter2", prng, store.NewFileStore, t)
+	defer closeFn()
+
+	_, err := h.ReadDir(&pb.RsReadRequest{
+		Path:  "domeDir/../../../user/",
+		Token: token.Marshal(),
+	})
+	if !errors.Is(err, store.NonLocalFileErr) {
+		t.Errorf("Unexpected error for a non-local file path."+
+			"\nexpected: %v\nreceived: %+v", store.NonLocalFileErr, err)
 	}
 }
 
