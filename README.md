@@ -12,7 +12,7 @@ port: 22841
 
 # Path to CA-signed certificate files in PEM format.
 signedCertPath: "~/syncServer.crt"
-signedKeyPath:  "~/syncServer.key"
+signedKeyPath: "~/syncServer.key"
 
 # Duration that logged-in sessions are valid.
 tokenTTL: 24h

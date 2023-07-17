@@ -8,6 +8,7 @@
 package store
 
 import (
+	ioFS "io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,6 +30,10 @@ type FileStore struct {
 	mux sync.Mutex
 }
 
+// FilePerm is the permissions used when creating files and directories.
+// 700 means only the owner can see and modify files.
+const FilePerm = ioFS.FileMode(0700)
+
 // NewFileStore creates a new FileStore at the specified base directory. This
 // function creates a new directory in the filesystem.
 //
@@ -40,7 +45,7 @@ func NewFileStore(storageDir, baseDir string) (Store, error) {
 	}
 	fs := &FileStore{baseDir: baseDir}
 
-	err = os.MkdirAll(fs.baseDir, 0700)
+	err = os.MkdirAll(fs.baseDir, FilePerm)
 	if err != nil {
 		return nil, errors.Wrapf(
 			err, "failed to make base directory %s", fs.baseDir)
@@ -72,7 +77,7 @@ func (fs *FileStore) Write(path string, data []byte) error {
 		return errors.WithStack(err)
 	}
 
-	err = utils.WriteFileDef(path, data)
+	err = utils.WriteFile(path, data, FilePerm, FilePerm)
 	if err != nil {
 		return errors.WithStack(err)
 	}

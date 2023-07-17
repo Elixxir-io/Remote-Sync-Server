@@ -20,48 +20,48 @@ import (
 	"gitlab.com/xx_network/primitives/netTime"
 )
 
-// Unit test of newStoreInstance.
-func Test_newStoreInstance(t *testing.T) {
+// Unit test of newUserSession.
+func Test_newUserSession(t *testing.T) {
 	n, err := nonce.NewNonce(uint(5*time.Minute + 56*time.Nanosecond))
 	if err != nil {
 		t.Errorf("Failed to generate new nonce: %+v", err)
 	}
-	expected := storeInstance{
+	expected := userSession{
 		username: "username",
 		Nonce:    n,
 		Store:    nil,
 	}
 	expected.Store, _ = store.NewMemStore("", "")
 
-	si, err := newStoreInstance("", expected.username, n, store.NewMemStore)
+	si, err := newUserSession("", expected.username, n, store.NewMemStore)
 	if err != nil {
-		t.Errorf("Failed to make new storeInstance: %+v", err)
+		t.Errorf("Failed to make new userSession: %+v", err)
 	}
 
 	if !reflect.DeepEqual(expected, si) {
-		t.Errorf("Unexpected new storeInstance.\nexpected: %+v\nreceived: %+v",
+		t.Errorf("Unexpected new userSession.\nexpected: %+v\nreceived: %+v",
 			expected, si)
 	}
 }
 
-// Error path: Tests that newStoreInstance returns store.NonLocalFileErr for a
+// Error path: Tests that newUserSession returns store.NonLocalFileErr for a
 // non-local path.
-func Test_newStoreInstance_NonLocalFileError(t *testing.T) {
+func Test_newUserSession_NonLocalFileError(t *testing.T) {
 	testDir := "tmp"
 	defer func() {
 		if err := os.RemoveAll(testDir); err != nil {
 			t.Fatalf("Failed to remove %s: %+v", testDir, err)
 		}
 	}()
-	_, err := newStoreInstance(
+	_, err := newUserSession(
 		testDir, "user/../..", nonce.Nonce{}, store.NewFileStore)
 	if !errors.Is(err, store.NonLocalFileErr) {
-		t.Errorf("Failed to make new storeInstance: %+v", err)
+		t.Errorf("Failed to make new userSession: %+v", err)
 	}
 }
 
-// Tests determined times if they are valid via storeInstance.isValid
-func Test_storeInstance_isValid(t *testing.T) {
+// Tests determined times if they are valid via userSession.isValid
+func Test_userSession_isValid(t *testing.T) {
 	prng := rand.New(rand.NewSource(4035390))
 
 	times := map[time.Time]bool{}
@@ -77,7 +77,7 @@ func Test_storeInstance_isValid(t *testing.T) {
 	}
 
 	for expiryTime, expected := range times {
-		valid := storeInstance{Nonce: nonce.Nonce{ExpiryTime: expiryTime}}.IsValid()
+		valid := userSession{Nonce: nonce.Nonce{ExpiryTime: expiryTime}}.IsValid()
 		if valid != expected {
 			t.Errorf("Unexpected IsValid evaltuion for %s at time %s."+
 				"\nexpected: %t\nreceived: %t",

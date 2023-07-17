@@ -27,10 +27,6 @@ var (
 	// not exist.
 	InvalidTokenErr = errors.New("Invalid token, login required")
 
-	// StoreAlreadyExistsErr is returned when passed a store with the given
-	// token already exists.
-	StoreAlreadyExistsErr = errors.New("store with token already exists")
-
 	// InvalidCredentialsErr is returned when a username does not match a
 	// registered user or the password hashed with a salt does not match the
 	// expected password hash.
@@ -41,7 +37,7 @@ var (
 type handler struct {
 	storageDir    string
 	tokenTTL      time.Duration
-	stores        map[Token]*storeInstance
+	sessions      map[Token]*userSession
 	userTokens    map[string]Token  // Map of username to token
 	userPasswords map[string]string // Map of username to password (from CSV)
 	newStore      store.NewStore
@@ -61,7 +57,7 @@ func newHandler(storageDir string, tokenTTL time.Duration,
 	return &handler{
 		storageDir:    storageDir,
 		tokenTTL:      tokenTTL,
-		stores:        make(map[Token]*storeInstance),
+		sessions:      make(map[Token]*userSession),
 		userTokens:    make(map[string]Token),
 		userPasswords: userPasswords,
 		newStore:      newStore,
@@ -104,7 +100,7 @@ func (h *handler) Login(
 	}
 
 	// Add token and initialize user directory in storage
-	s, err := h.addStore(msg.GetUsername())
+	s, err := h.addSession(msg.GetUsername())
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +123,7 @@ func (h *handler) Login(
 func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
 	jww.TRACE.Printf("Received Read message: %s", msg)
 
-	s, err := h.getStore(UnmarshalToken(msg.GetToken()))
+	s, err := h.getSession(UnmarshalToken(msg.GetToken()))
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +143,7 @@ func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
 func (h *handler) Write(msg *pb.RsWriteRequest) (*messages.Ack, error) {
 	jww.TRACE.Printf("Received Write message: %s", msg)
 
-	s, err := h.getStore(UnmarshalToken(msg.GetToken()))
+	s, err := h.getSession(UnmarshalToken(msg.GetToken()))
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +165,7 @@ func (h *handler) GetLastModified(
 	msg *pb.RsReadRequest) (*pb.RsTimestampResponse, error) {
 	jww.TRACE.Printf("Received GetLastModified message: %s", msg)
 
-	s, err := h.getStore(UnmarshalToken(msg.GetToken()))
+	s, err := h.getSession(UnmarshalToken(msg.GetToken()))
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +186,7 @@ func (h *handler) GetLastWrite(
 	msg *pb.RsLastWriteRequest) (*pb.RsTimestampResponse, error) {
 	jww.TRACE.Printf("Received GetLastWrite message: %s", msg)
 
-	s, err := h.getStore(UnmarshalToken(msg.GetToken()))
+	s, err := h.getSession(UnmarshalToken(msg.GetToken()))
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +208,7 @@ func (h *handler) ReadDir(
 	msg *pb.RsReadRequest) (*pb.RsReadDirResponse, error) {
 	jww.TRACE.Printf("Received ReadDir message: %s", msg)
 
-	s, err := h.getStore(UnmarshalToken(msg.GetToken()))
+	s, err := h.getSession(UnmarshalToken(msg.GetToken()))
 	if err != nil {
 		return nil, err
 	}
@@ -250,13 +246,13 @@ func hashPassword(clearTextPassword string, salt []byte) []byte {
 	return h.Sum(nil)
 }
 
-// getStore returns the store for the given token. Returns [InvalidTokenErr] for
-// an invalid token.
-func (h *handler) getStore(token Token) (store.Store, error) {
+// getSession returns the store for the given token. Returns [InvalidTokenErr]
+// for an invalid token.
+func (h *handler) getSession(token Token) (store.Store, error) {
 	h.mux.Lock()
 	defer h.mux.Unlock()
 
-	s, exists := h.stores[token]
+	s, exists := h.sessions[token]
 	if !exists {
 		return nil, InvalidTokenErr
 	}
@@ -264,7 +260,7 @@ func (h *handler) getStore(token Token) (store.Store, error) {
 	// If the store is no longer valid, then delete it and its token from their
 	// respective maps
 	if !s.IsValid() {
-		delete(h.stores, token)
+		delete(h.sessions, token)
 		delete(h.userTokens, s.username)
 		return nil, InvalidTokenErr
 	}
@@ -272,45 +268,45 @@ func (h *handler) getStore(token Token) (store.Store, error) {
 	return s, nil
 }
 
-// addStore generates a new Token and expiration time. On first login, it
+// addSession generates a new Token and expiration time. On first login, it
 // initializes a new storage directory for user. On subsequent logins, it
 // overwrites the token with the new token gives access to the user's directory.
-// Returns StoreAlreadyExistsErr if one already exists for the token.
-func (h *handler) addStore(username string) (*storeInstance, error) {
+func (h *handler) addSession(username string) (*userSession, error) {
 	h.mux.Lock()
 	defer h.mux.Unlock()
 
-	// Generate a new nonce and token
-	n, err := nonce.NewNonce(uint(h.tokenTTL.Seconds()))
-	if err != nil {
-		// This error cannot currently happen
-		return nil, err
-	}
-	token := Token(n.Value)
-
-	// The token should always be unique; this error should never occur
-	if _, exists := h.stores[token]; exists {
-		return nil, errors.WithStack(StoreAlreadyExistsErr)
+	var token Token
+	var n nonce.Nonce
+	var err error
+	for exists := true; exists; _, exists = h.sessions[token] {
+		// Generate a new nonce and token
+		n, err = nonce.NewNonce(uint(h.tokenTTL.Seconds()))
+		if err != nil {
+			// This error cannot currently happen
+			return nil, err
+		}
+		token = Token(n.Value)
 	}
 
 	if oldToken, exists := h.userTokens[username]; exists {
-		// If an old token is registered, update the token in the stores map
-		jww.DEBUG.Printf(
-			"Deleting old store for %s after overwriting token.", username)
-		h.stores[token] = h.stores[oldToken]
-		h.stores[token].Value = nonce.Value(token)
-		delete(h.stores, oldToken)
+		// If an old token is registered, update the token in the sessions map
+		jww.DEBUG.Printf("Updating token for user %s.", username)
+		h.sessions[token] = h.sessions[oldToken]
+		h.sessions[token].Value = nonce.Value(token)
+		delete(h.sessions, oldToken)
 	} else {
 		// If no token exists, create a new store instance and put in the map
-		si, err := newStoreInstance(h.storageDir, username, n, h.newStore)
+		jww.DEBUG.Printf("Creating new token for user %s.", username)
+
+		us, err := newUserSession(h.storageDir, username, n, h.newStore)
 		if err != nil {
 			return nil, err
 		}
-		h.stores[token] = &si
+		h.sessions[token] = &us
 	}
 
 	// Update to the newest token
 	h.userTokens[username] = token
 
-	return h.stores[token], nil
+	return h.sessions[token], nil
 }

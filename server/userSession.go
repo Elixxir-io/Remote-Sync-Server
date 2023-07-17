@@ -14,27 +14,27 @@ import (
 	"gitlab.com/xx_network/crypto/nonce"
 )
 
-// storeInstance stores an instance of a store.Store that only exists for the
-// given TTL.
-type storeInstance struct {
+// userSession stores a nonce with a unique token and an instance of a
+// store.Store for a user that only exists for the given TTL.
+type userSession struct {
 	username string
 	nonce.Nonce
 	store.Store
 }
 
-// newStoreInstance creates a new store for the user that will expire after the
+// newUserSession creates a new session for the user that will expire after the
 // given TTL.
 //
 // Returns [store.NonLocalFileErr] if the file is outside the storage directory.
-func newStoreInstance(storageDir, username string, n nonce.Nonce,
-	newStore store.NewStore) (storeInstance, error) {
+func newUserSession(storageDir, username string, n nonce.Nonce,
+	newStore store.NewStore) (userSession, error) {
 	s, err := newStore(storageDir, username)
 	if err != nil {
-		return storeInstance{}, errors.Wrapf(
+		return userSession{}, errors.Wrapf(
 			err, "Failed to create new store for user %q", username)
 	}
 
-	return storeInstance{
+	return userSession{
 		username: username,
 		Nonce:    n,
 		Store:    s,

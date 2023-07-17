@@ -64,7 +64,7 @@ func TestNewFileStore_BaseDirectoryIsFileError(t *testing.T) {
 	path := filepath.Join(testDir, "file")
 	defer removeTestFile(t, testDir)
 
-	err := utils.WriteFileDef(path, []byte("data"))
+	err := utils.WriteFile(path, []byte("data"), FilePerm, FilePerm)
 	if err != nil {
 		t.Errorf("Failed to write file: %+v", err)
 	}
@@ -96,11 +96,11 @@ func TestFileStore_Read(t *testing.T) {
 	path2 := filepath.Join(testDir, "file2.txt")
 	expected := []byte("hello")
 
-	if err := os.MkdirAll(testDir, os.ModePerm); err != nil {
+	if err := os.MkdirAll(testDir, FilePerm); err != nil {
 		t.Fatal(err)
-	} else if err = os.WriteFile(path1Write, expected, 0644); err != nil {
+	} else if err = os.WriteFile(path1Write, expected, FilePerm); err != nil {
 		t.Fatalf("Failed to write to %s: %+v", path1Write, err)
-	} else if err = os.WriteFile(path2, []byte("hi"), 0644); err != nil {
+	} else if err = os.WriteFile(path2, []byte("hi"), FilePerm); err != nil {
 		t.Fatalf("Failed to write to %s: %+v", path1, err)
 	}
 
@@ -338,7 +338,8 @@ func TestFileStore_readyPath(t *testing.T) {
 		err            error
 	}{
 		{"dir/file", filepath.Join(fs.baseDir, "dir/file"), nil},
-		{"/root/.ssh/authorized_keys", filepath.Join(fs.baseDir, "/root/.ssh/authorized_keys"), nil},
+		{"/root/.ssh/authorized_keys",
+			filepath.Join(fs.baseDir, "/root/.ssh/authorized_keys"), nil},
 		{"../dir/file", "", NonLocalFileErr},
 		{"..", "", NonLocalFileErr},
 	}
