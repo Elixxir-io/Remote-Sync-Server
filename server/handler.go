@@ -30,7 +30,7 @@ var (
 	// InvalidCredentialsErr is returned when a username does not match a
 	// registered user or the password hashed with a salt does not match the
 	// expected password hash.
-	InvalidCredentialsErr = errors.New("invalid password or password")
+	InvalidCredentialsErr = errors.New("invalid username or password")
 )
 
 // handler handles the server stores for each token/user.
@@ -44,9 +44,9 @@ type handler struct {
 	mux           sync.Mutex
 }
 
-// newHandler generates a new store handler.
+// newHandler generates a new server handler.
 //
-// Pass in Store.NewMemStore into newStore for testing.
+// Pass in store.NewMemStore into newStore for testing.
 func newHandler(storageDir string, tokenTTL time.Duration,
 	userRecords [][]string, newStore store.NewStore) (*handler, error) {
 	userPasswords, err := userRecordsToMap(userRecords)
@@ -100,17 +100,19 @@ func (h *handler) Login(
 	}
 
 	// Add token and initialize user directory in storage
-	s, err := h.addSession(msg.GetUsername())
+	us, err := h.addSession(msg.GetUsername())
 	if err != nil {
+		jww.WARN.Printf(
+			"Failed to add session for user %q: %+v", msg.GetUsername(), err)
 		return nil, err
 	}
 
-	jww.INFO.Printf("Added store for user %s that expires at %s",
-		msg.GetUsername(), s.ExpiryTime)
+	jww.INFO.Printf("Added session for user %s that expires at %s",
+		msg.GetUsername(), us.ExpiryTime)
 
 	return &pb.RsAuthenticationResponse{
-		Token:     s.Value[:],
-		ExpiresAt: s.ExpiryTime.UnixNano(),
+		Token:     us.Value[:],
+		ExpiresAt: us.ExpiryTime.UnixNano(),
 	}, nil
 }
 
@@ -123,13 +125,15 @@ func (h *handler) Login(
 func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
 	jww.TRACE.Printf("Received Read message: %s", msg)
 
-	s, err := h.getSession(UnmarshalToken(msg.GetToken()))
+	us, err := h.getSession(UnmarshalToken(msg.GetToken()))
 	if err != nil {
 		return nil, err
 	}
 
-	data, err := s.Read(msg.GetPath())
+	data, err := us.Read(msg.GetPath())
 	if err != nil {
+		jww.WARN.Printf("Failed to read \"%s\" for user %q: %+v",
+			msg.GetPath(), us.username, err)
 		return nil, err
 	}
 
@@ -143,13 +147,15 @@ func (h *handler) Read(msg *pb.RsReadRequest) (*pb.RsReadResponse, error) {
 func (h *handler) Write(msg *pb.RsWriteRequest) (*messages.Ack, error) {
 	jww.TRACE.Printf("Received Write message: %s", msg)
 
-	s, err := h.getSession(UnmarshalToken(msg.GetToken()))
+	us, err := h.getSession(UnmarshalToken(msg.GetToken()))
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.Write(msg.GetPath(), msg.GetData())
+	err = us.Write(msg.GetPath(), msg.GetData())
 	if err != nil {
+		jww.WARN.Printf("Failed to write to \"%s\" for user %q: %+v",
+			msg.GetPath(), us.username, err)
 		return nil, err
 	}
 
@@ -165,13 +171,15 @@ func (h *handler) GetLastModified(
 	msg *pb.RsReadRequest) (*pb.RsTimestampResponse, error) {
 	jww.TRACE.Printf("Received GetLastModified message: %s", msg)
 
-	s, err := h.getSession(UnmarshalToken(msg.GetToken()))
+	us, err := h.getSession(UnmarshalToken(msg.GetToken()))
 	if err != nil {
 		return nil, err
 	}
 
-	lastModified, err := s.GetLastModified(msg.GetPath())
+	lastModified, err := us.GetLastModified(msg.GetPath())
 	if err != nil {
+		jww.WARN.Printf("Failed to get last modified time of \"%s\" for "+
+			"user %q: %+v", msg.GetPath(), us.username, err)
 		return nil, err
 	}
 
@@ -186,13 +194,15 @@ func (h *handler) GetLastWrite(
 	msg *pb.RsLastWriteRequest) (*pb.RsTimestampResponse, error) {
 	jww.TRACE.Printf("Received GetLastWrite message: %s", msg)
 
-	s, err := h.getSession(UnmarshalToken(msg.GetToken()))
+	us, err := h.getSession(UnmarshalToken(msg.GetToken()))
 	if err != nil {
 		return nil, err
 	}
 
-	lastModified, err := s.GetLastWrite()
+	lastModified, err := us.GetLastWrite()
 	if err != nil {
+		jww.WARN.Printf(
+			"Failed to get last write for user %q: %+v", us.username, err)
 		return nil, err
 	}
 
@@ -208,13 +218,15 @@ func (h *handler) ReadDir(
 	msg *pb.RsReadRequest) (*pb.RsReadDirResponse, error) {
 	jww.TRACE.Printf("Received ReadDir message: %s", msg)
 
-	s, err := h.getSession(UnmarshalToken(msg.GetToken()))
+	us, err := h.getSession(UnmarshalToken(msg.GetToken()))
 	if err != nil {
 		return nil, err
 	}
 
-	directories, err := s.ReadDir(msg.GetPath())
+	directories, err := us.ReadDir(msg.GetPath())
 	if err != nil {
+		jww.WARN.Printf("Failed to get read dir \"%s\" for user %q: %+v",
+			msg.GetPath(), us.username, err)
 		return nil, err
 	}
 
@@ -229,10 +241,12 @@ func (h *handler) verifyUser(username string, passwordHash, salt []byte) error {
 
 	clearTextPassword, exists := h.userPasswords[username]
 	if !exists {
+		jww.WARN.Printf("Failed to find username %q", username)
 		return InvalidCredentialsErr
 	}
 
 	if !bytes.Equal(hashPassword(clearTextPassword, salt), passwordHash) {
+		jww.WARN.Printf("Incorrect password hash for user %q", username)
 		return InvalidCredentialsErr
 	}
 
@@ -246,26 +260,28 @@ func hashPassword(clearTextPassword string, salt []byte) []byte {
 	return h.Sum(nil)
 }
 
-// getSession returns the store for the given token. Returns [InvalidTokenErr]
-// for an invalid token.
-func (h *handler) getSession(token Token) (store.Store, error) {
+// getSession returns the user session for the given token. Returns
+// InvalidTokenErr for an invalid token.
+func (h *handler) getSession(token Token) (*userSession, error) {
 	h.mux.Lock()
 	defer h.mux.Unlock()
 
-	s, exists := h.sessions[token]
+	us, exists := h.sessions[token]
 	if !exists {
+		jww.WARN.Printf("Failed to find session for token %X", token)
 		return nil, InvalidTokenErr
 	}
 
-	// If the store is no longer valid, then delete it and its token from their
-	// respective maps
-	if !s.IsValid() {
+	// If the session is no longer valid, then delete it and its token from
+	// their respective maps
+	if !us.IsValid() {
+		jww.WARN.Printf("Session for user %q expired", us.username)
 		delete(h.sessions, token)
-		delete(h.userTokens, s.username)
+		delete(h.userTokens, us.username)
 		return nil, InvalidTokenErr
 	}
 
-	return s, nil
+	return us, nil
 }
 
 // addSession generates a new Token and expiration time. On first login, it
@@ -295,7 +311,7 @@ func (h *handler) addSession(username string) (*userSession, error) {
 		h.sessions[token].Value = nonce.Value(token)
 		delete(h.sessions, oldToken)
 	} else {
-		// If no token exists, create a new store instance and put in the map
+		// If no token exists, create a new session and put in the map
 		jww.DEBUG.Printf("Creating new token for user %s.", username)
 
 		us, err := newUserSession(h.storageDir, username, n, h.newStore)

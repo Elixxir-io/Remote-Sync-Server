@@ -555,12 +555,12 @@ func Test_handler_getSession(t *testing.T) {
 	}
 	si1, err := h.addSession("waldo")
 	if err != nil {
-		t.Errorf("Failed to add store with the same username: %+v", err)
+		t.Errorf("Failed to add session with the same username: %+v", err)
 	}
 
 	si2, err := h.getSession(Token(si1.Value))
 	if err != nil {
-		t.Errorf("Failed to get store for token %X: %+v", si1.Value, err)
+		t.Errorf("Failed to get session for token %X: %+v", si1.Value, err)
 	}
 
 	if si1 != si2 {
@@ -595,7 +595,7 @@ func Test_handler_getSession_ExpiredTokenError(t *testing.T) {
 
 	si, err := h.addSession("waldo")
 	if err != nil {
-		t.Errorf("Failed to add store with the same username: %+v", err)
+		t.Errorf("Failed to add session with the same username: %+v", err)
 	}
 
 	time.Sleep(time.Second)
@@ -619,13 +619,13 @@ func Test_handler_addSession(t *testing.T) {
 
 	si1, err := h.addSession("waldo")
 	if err != nil {
-		t.Errorf("Failed to add store with the same username: %+v", err)
+		t.Errorf("Failed to add session with the same username: %+v", err)
 	}
 	oldToken := si1.Value
 
 	si2, err := h.addSession("waldo")
 	if err != nil {
-		t.Errorf("Failed to add store with the same username: %+v", err)
+		t.Errorf("Failed to add session with the same username: %+v", err)
 	}
 
 	if oldToken == si2.Value {

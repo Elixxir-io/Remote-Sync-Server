@@ -25,13 +25,13 @@ type userSession struct {
 // newUserSession creates a new session for the user that will expire after the
 // given TTL.
 //
-// Returns [store.NonLocalFileErr] if the file is outside the storage directory.
+// Returns store.NonLocalFileErr if the file is outside the storage directory.
 func newUserSession(storageDir, username string, n nonce.Nonce,
 	newStore store.NewStore) (userSession, error) {
 	s, err := newStore(storageDir, username)
 	if err != nil {
 		return userSession{}, errors.Wrapf(
-			err, "Failed to create new store for user %q", username)
+			err, "Failed to create new session storage for user %q", username)
 	}
 
 	return userSession{

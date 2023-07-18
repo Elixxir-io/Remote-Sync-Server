@@ -14,6 +14,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -107,6 +108,12 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			jww.FATAL.Panicf("Failed to start server: %+v", err)
 		}
+
+		// Wait for kill signal
+		sigChan := make(chan os.Signal)
+		signal.Notify(sigChan, os.Interrupt)
+		<-sigChan
+		jww.INFO.Print("Exiting...")
 	},
 }
 
