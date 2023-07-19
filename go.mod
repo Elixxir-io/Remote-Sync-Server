@@ -6,9 +6,10 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/jwalterweatherman v1.1.0
+	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.16.0
-	gitlab.com/elixxir/comms v0.0.4-0.20230714203810-bd08061ec721
-	gitlab.com/elixxir/crypto v0.0.7-0.20230522162218-45433d877235
+	gitlab.com/elixxir/comms v0.0.4-0.20230718154315-08043221466a
+	gitlab.com/elixxir/crypto v0.0.7-0.20230614183801-387e0cb8e76f
 	gitlab.com/xx_network/comms v0.0.4-0.20230214180029-5387fb85736d
 	gitlab.com/xx_network/crypto v0.0.5-0.20230214003943-8a09396e95dd
 	gitlab.com/xx_network/primitives v0.0.4-0.20230710164512-888a035f126d
@@ -33,7 +34,6 @@ require (
 	github.com/soheilhy/cmux v0.1.5 // indirect
 	github.com/spf13/afero v1.9.5 // indirect
 	github.com/spf13/cast v1.5.1 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/subosito/gotenv v1.4.2 // indirect
 	gitlab.com/elixxir/primitives v0.0.3-0.20230214180039-9a25e2d3969c // indirect
 	go.uber.org/atomic v1.10.0 // indirect
